@@ -6,6 +6,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.poo.checker.Checker;
 import org.poo.checker.CheckerConstants;
 import org.poo.fileio.ObjectInput;
+import org.poo.main.bank.BankSystem;
+import org.poo.main.exchange_rate.ExchangeRate;
+import org.poo.main.user.User;
 
 import java.io.File;
 import java.io.IOException;
@@ -74,24 +77,43 @@ public final class Main {
 
         ArrayNode output = objectMapper.createArrayNode();
 
-        /*
-         * TODO Implement your function here
-         *
-         * How to add output to the output array?
-         * There are multiple ways to do this, here is one example:
-         *
-         * ObjectMapper mapper = new ObjectMapper();
-         *
-         * ObjectNode objectNode = mapper.createObjectNode();
-         * objectNode.put("field_name", "field_value");
-         *
-         * ArrayNode arrayNode = mapper.createArrayNode();
-         * arrayNode.add(objectNode);
-         *
-         * output.add(arrayNode);
-         * output.add(objectNode);
-         *
-         */
+        BankSystem bankSystem = new BankSystem();
+
+        // Parsing the users from input and adding them to the bank system
+        for (var userInput : inputData.getUsers()) {
+            User user = new User(
+                    userInput.getFirstName(),
+                    userInput.getLastName(),
+                    userInput.getEmail(),
+                    userInput.getBirthDate(),
+                    userInput.getOccupation());
+            bankSystem.addUser(user);
+        }
+
+        // Parsing the exchange rates from input and adding them to the bank system
+        for (var exchangeRateInput : inputData.getExchangeRates()) {
+            ExchangeRate exchangeRate = new ExchangeRate(
+                    exchangeRateInput.getFrom(),
+                    exchangeRateInput.getTo(),
+                    exchangeRateInput.getRate()
+            );
+            bankSystem.addExchangeRate(exchangeRate);
+        }
+
+        // Parsing the merchants from input and adding them to the bank system
+        for (var commerciantInput : inputData.getCommerciants()) {
+            Commerciant commerciant = new Commerciant(
+                    commerciantInput.getCommerciant(),
+                    commerciantInput.getId(),
+                    commerciantInput.getAccount(),
+                    commerciantInput.getType(),
+                    commerciantInput.getCashbackStrategy()
+            );
+            bankSystem.addCommerciant(commerciant);
+        }
+
+        // Process the commands from the input and generate the output
+        bankSystem.processCommands(inputData.getCommands(), output);
 
         ObjectWriter objectWriter = objectMapper.writerWithDefaultPrettyPrinter();
         objectWriter.writeValue(new File(filePath2), output);
@@ -104,9 +126,8 @@ public final class Main {
      * @return the extracted numbers
      */
     public static int fileConsumer(final File file) {
-        return Integer.parseInt(
-                file.getName()
-                        .replaceAll(CheckerConstants.DIGIT_REGEX, CheckerConstants.EMPTY_STR)
-        );
+        String fileName = file.getName()
+                .replaceAll(CheckerConstants.DIGIT_REGEX, CheckerConstants.EMPTY_STR);
+        return Integer.parseInt(fileName.substring(0, 2));
     }
 }
