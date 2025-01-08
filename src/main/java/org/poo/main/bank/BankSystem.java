@@ -1,6 +1,6 @@
 package org.poo.main.bank;
 
-import org.poo.main.Commerciant;
+import org.poo.main.Commerciant.Commerciant;
 import org.poo.main.cards.Card;
 import org.poo.main.cards.OneTimeCard;
 import org.poo.main.accounts.Account;
@@ -54,7 +54,7 @@ public class BankSystem {
                 case "deleteAccount" -> deleteAccount(command, output);
                 case "deleteCard" -> deleteCard(command);
                 case "payOnline" -> payOnline(command, output);
-                case "sendMoney" -> sendMoney(command);
+                case "sendMoney" -> sendMoney(command, output);
                 case "setAlias" -> setAlias(command);
                 case "printTransactions" -> printTransactions(command, output);
                 case "setMinimumBalance" -> setMinimumBalance(command);
@@ -272,10 +272,12 @@ public class BankSystem {
         String email = command.getEmail();
         String cardNumber = command.getCardNumber();
         double amount = command.getAmount();
+        if (amount <= 0)
+            return;
         String currency = command.getCurrency();
         int timestamp = command.getTimestamp();
         String description = command.getDescription();
-        String commerciant = command.getCommerciant();
+        String commerciantName = command.getCommerciant();
 
         User user = Tools.findUserByEmail(email, users);
 
@@ -312,8 +314,31 @@ public class BankSystem {
             return;
         }
 
+        // Find the commercant based on the name provided
+        Commerciant commerciant = Tools.findCommerciantByName(commerciantName, commerciants);
+        if (commerciant == null) {
+            return;
+        }
+
         // Perform the payment if the card is valid and not frozen
-        performPayment(user, card, account, amount, currency, commerciant, timestamp, output);
+        performPayment(user, card, account, amount, currency, commerciantName, timestamp, output);
+
+        String accountCurrency = account.getCurrency(); // Moneda contului
+
+        if (user.isApplyingCashback(commerciant, accountCurrency, exchangeRates) != null) {
+
+            // Calculăm cashback-ul în moneda contului
+            double cashback = user.applyCashbackForTransaction(commerciant, amount,
+                    user.isApplyingCashback(commerciant, accountCurrency, exchangeRates),
+                    accountCurrency, exchangeRates);
+
+            account.deposit(cashback);  // Depunem cashback-ul în cont
+            System.out.println("Cashback aplicat: " + cashback + " " + accountCurrency);
+        }
+
+        // doar ca zice alina sa rotunjesc dupa fiecare operatie
+        account.setBalance(Math.round(account.getBalance() * 100.0) / 100.0) ;
+
     }
 
     private void performPayment(final User user, final Card card, final Account account,
@@ -337,6 +362,17 @@ public class BankSystem {
             }
 
             account.spend(finalAmount);
+            double commission = calculateComision(user, finalAmount, currency, exchangeRates);
+
+            // Substract the calculated commision from the account
+            account.spend((commission));
+
+            Commerciant commerciantt = Tools.findCommerciantByName(commerciant, commerciants);
+            // Adaug tranzactia in mapul userului cu comercianti ca sa stiu nr de tranzactii si totalspend
+            user.addTransactionToCommerciant(commerciantt, amount, currency, account.getCurrency(), exchangeRates);
+
+            System.out.println("platesc pe bune :" + finalAmount +" in moneda:" + currency);
+
             // Add the transaction to the user's transaction list
             transactionService.addOnlinePaymentTransaction(timestamp,
                     card, finalAmount, commerciant, user, account.getIban());
@@ -396,7 +432,7 @@ public class BankSystem {
         output.add(errorNode);
     }
 
-    private void sendMoney(final CommandInput command) {
+    private void sendMoney(final CommandInput command, final ArrayNode output) {
         // Get sender and receiver account info
         String senderIBAN = command.getAccount();
         String receiverIBAN = command.getReceiver();
@@ -409,6 +445,7 @@ public class BankSystem {
 
         // Check if both accounts exist
         if (senderAccount == null || receiverAccount == null) {
+            sendMoneyError("User not found", timestamp, output);
             return;
         }
 
@@ -455,8 +492,24 @@ public class BankSystem {
 
         transactionService.addReceivedMoneyTransaction(timestamp, senderAccount,
                 receiverAccount, amount, exchangeRate, receiverAccount.getCurrency(), description);
+
+        // doar ca zice alina sa rotunjesc dupa fiecare operatie
+        senderAccount.setBalance(Math.round(senderAccount.getBalance() * 100.0) / 100.0) ;
     }
 
+    private void sendMoneyError(final String description, final int timestamp, final ArrayNode output) {
+        ObjectNode errorNode = objectMapper.createObjectNode();
+        errorNode.put("command", "sendMoney");
+
+        ObjectNode errorOutput = objectMapper.createObjectNode();
+        errorOutput.put("timestamp", timestamp);
+        errorOutput.put("description", description);
+
+        errorNode.set("output", errorOutput);
+        errorNode.put("timestamp", timestamp);
+
+        output.add(errorNode);
+    }
 
     private void setAlias(final CommandInput command) {
         String email = command.getEmail();
@@ -564,52 +617,53 @@ public class BankSystem {
         output.add(resultNode);
     }
 
-    private void splitPayment(final CommandInput command) {
-        List<String> ibans = command.getAccounts();
-        double totalAmount = command.getAmount();
-        double splitAmount = totalAmount / ibans.size();
-        String currency = command.getCurrency();
-        int timestamp = command.getTimestamp();
-
-        boolean canDoSplit = true;
-        String cheapIBAN = null;
-
-        // Check all IBANs to see if each account has enough balance for the split payment
-        for (String iban : ibans) {
-            Account account = Tools.findAccountByIBAN(iban, users);
-            double finalSplitAmount =
-                    Tools.calculateFinalAmount(account, splitAmount, exchangeRates, currency);
-
-            if (account.getBalance() < finalSplitAmount) {
-                canDoSplit = false;
-                cheapIBAN = iban;
-                // We will store as cheap IBAN the last IBAN found that doesn't have funds
-            }
-        }
-
-        if (canDoSplit) {
-            for (String iban : ibans) {
-                Account account = Tools.findAccountByIBAN(iban, users);
-                User currUser = Tools.findUserByAccount(iban, users);
-                double finalSplitAmount =
-                        Tools.calculateFinalAmount(account, splitAmount, exchangeRates, currency);
-                account.spend(finalSplitAmount);
-
-                // Add the new card transaction to the user's transaction list
-                transactionService.addSuccessSplitTransaction(timestamp,
-                        totalAmount, splitAmount, currency, ibans, currUser);
-            }
-        } else {
-            // Create and add an error transaction for each user involved
-            for (String iban : ibans) {
-                User user = Tools.findUserByAccount(iban, users);
-                if (user != null) {
-                    transactionService.addSplitErrorTransaction(timestamp,
-                            splitAmount, totalAmount, currency, cheapIBAN, ibans, user);
-                }
-            }
-        }
-    }
+//    private void splitPayment(final CommandInput command) {
+//        List<String> ibans = command.getAccounts();
+//        double totalAmount = command.getAmount();
+//        double splitAmount = totalAmount / ibans.size();
+//        String currency = command.getCurrency();
+//        int timestamp = command.getTimestamp();
+//        String splitType = command.getSplitPaymentType();
+//
+//        boolean canDoSplit = true;
+//        String cheapIBAN = null;
+//
+//        // Check all IBANs to see if each account has enough balance for the split payment
+//        for (String iban : ibans) {
+//            Account account = Tools.findAccountByIBAN(iban, users);
+//            double finalSplitAmount =
+//                    Tools.calculateFinalAmount(account, splitAmount, exchangeRates, currency);
+//
+//            if (account.getBalance() < finalSplitAmount) {
+//                canDoSplit = false;
+//                cheapIBAN = iban;
+//                // We will store as cheap IBAN the last IBAN found that doesn't have funds
+//            }
+//        }
+//
+//        if (canDoSplit) {
+//            for (String iban : ibans) {
+//                Account account = Tools.findAccountByIBAN(iban, users);
+//                User currUser = Tools.findUserByAccount(iban, users);
+//                double finalSplitAmount =
+//                        Tools.calculateFinalAmount(account, splitAmount, exchangeRates, currency);
+//                account.spend(finalSplitAmount);
+//
+//                // Add the new card transaction to the user's transaction list
+//                transactionService.addSuccessSplitTransaction(timestamp,
+//                        totalAmount, splitAmount, currency, ibans, currUser);
+//            }
+//        } else {
+//            // Create and add an error transaction for each user involved
+//            for (String iban : ibans) {
+//                User user = Tools.findUserByAccount(iban, users);
+//                if (user != null) {
+//                    transactionService.addSplitErrorTransaction(timestamp,
+//                            splitAmount, totalAmount, currency, cheapIBAN, ibans, user);
+//                }
+//            }
+//        }
+//    }
 
     private void report(final CommandInput command, final ArrayNode output) {
         ObjectNode reportNode = objectMapper.createObjectNode();
@@ -677,12 +731,23 @@ public class BankSystem {
             return;
         }
 
+        User user = Tools.findUserByAccount(iban, users);
+
+        if (user == null) {
+            return;
+        }
+
+
         // Check if the account is a savings account
         if (account.isSavingsAccount()) {
             SavingsAccount savingsAccount = (SavingsAccount) account;
             double interestRate = savingsAccount.getInterestRate();
             double balance = savingsAccount.getBalance();
             savingsAccount.deposit(interestRate * balance);
+
+            transactionService.addInterestTransaction(timestamp, interestRate * balance,
+                                                                savingsAccount.getCurrency(), user);
+
         } else {
             interestError("addInterest", timestamp, output);
         }
@@ -729,7 +794,6 @@ public class BankSystem {
         String currency = command.getCurrency();
         int timestamp = command.getTimestamp();
 
-        // Găsește utilizatorul și contul de economii
         Account savingsAccount = Tools.findAccountByIBAN(savingsIban, users);
         User user = Tools.findUserByAccount(savingsIban, users);
 
@@ -738,7 +802,6 @@ public class BankSystem {
             return;
         }
 
-        // Verifică dacă contul este de tip savings
         if (!(savingsAccount instanceof SavingsAccount)) {
             transactionService.addErrorTransaction(timestamp, "Account is not of type savings", user);
             return;
@@ -746,7 +809,6 @@ public class BankSystem {
 
         SavingsAccount savings = (SavingsAccount) savingsAccount;
 
-        // Verifică vârsta utilizatorului
         if (user.hasMinAge() == false) {
             transactionService.addErrorTransaction(timestamp, "You don't have the minimum age required.", user);
             return;
@@ -785,23 +847,21 @@ public class BankSystem {
         String newPlan = command.getNewPlanType();
         int timestamp = command.getTimestamp();
 
-        // Găsește contul și utilizatorul
+        // Find the account and user
         Account account = Tools.findAccountByIBAN(accountIBAN, users);
         if (account == null) {
-            System.out.println("ERROR: Account not found.");
             return;
         }
 
         User user = Tools.findUserByAccount(accountIBAN, users);
         if (user == null) {
-            System.out.println("ERROR: User not found.");
             return;
         }
 
         String currentPlan = user.getAccountPlan();
-        double upgradeFeeInRON = 0; // Taxa în RON
+        double upgradeFeeInRON = 0;
 
-        // Calcularea taxei de upgrade în RON
+        // Find the upgrade fee needed in RON
         switch (currentPlan) {
             case "standard", "student" -> {
                 if (newPlan.equals("silver")) {
@@ -809,7 +869,6 @@ public class BankSystem {
                 } else if (newPlan.equals("gold")) {
                     upgradeFeeInRON = 350;
                 } else {
-                    System.out.println("ERROR: Invalid upgrade plan.");
                     return;
                 }
             }
@@ -817,110 +876,106 @@ public class BankSystem {
                 if (newPlan.equals("gold")) {
                     upgradeFeeInRON = 250;
                 } else {
-                    System.out.println("ERROR: You cannot downgrade your plan.");
                     return;
                 }
             }
             case "gold" -> {
-                System.out.println("ERROR: The user already has the gold plan.");
                 return;
             }
             default -> {
-                System.out.println("ERROR: Invalid current plan.");
-                return;
             }
         }
 
-        // Convertim taxa în moneda contului specificat
         double upgradeFee = upgradeFeeInRON;
 
+        // Convert the ugrade fee (known in RON) in account currency
         if (!account.getCurrency().equals("RON")) {
             double exchangeRate = ExchangeRate.getExchangeRate(account.getCurrency(), "RON", exchangeRates);
-
-            // Divizăm la rata de schimb, nu înmulțim
-            upgradeFee = Math.round((upgradeFeeInRON / exchangeRate) * 100.0) / 100.0;
+            upgradeFee = ((upgradeFeeInRON / exchangeRate) * 100.0) / 100.0;
         }
 
-        // Verificăm fondurile disponibile în contul dat
+        // Check if the account has enough funds to upgrade plan
         if (account.getBalance() < upgradeFee) {
-            System.out.println("ERROR: Insufficient funds.");
             transactionService.addInsufficientFundsTransaction(timestamp,
                     "Insufficient funds for upgrade", user, accountIBAN);
             return;
         }
 
-        // Scădem taxa din contul specificat
+        // Substract the upgrade fee from account
         account.spend(upgradeFee);
 
-        // Aplicăm upgrade-ul pentru utilizator și toate conturile sale
+        // Upgrade the plan for given account and for all other accounts of that user
         user.setAccountPlan(newPlan);
         for (Account acc : user.getAccounts()) {
-            acc.setAccountPlan(newPlan); // Aplică noul plan la toate conturile
+            acc.setAccountPlan(newPlan);
         }
 
-        // Adăugăm tranzacția pentru upgrade
         transactionService.addUpgradePlanTransaction(timestamp, user, newPlan, accountIBAN);
     }
-
 
     public static double calculateComision(final User user, final double amount,
                                            final String currency,
                                            final List<ExchangeRate> exchangeRates) {
-        // Preluăm planul utilizatorului
+        // Get the user plan
         String plan = user.getAccountPlan();
-        double feeInRON = 0;
+        double fee = 0;
 
-        // Convertim suma în RON pentru comparare
-        double amountInRON = ExchangeRate.convertToRON(amount, currency, exchangeRates);
+        // Convert the silver threshold into currency of user
+        double thresholdSilver = 500;
+        if (!currency.equals("RON")) {
+            double exchangeRate = ExchangeRate.getExchangeRate("RON", currency, exchangeRates);
+            thresholdSilver = Math.round((500.0 * exchangeRate) * 100.0) / 100.0;
+        }
 
-        // Calculăm comisionul în RON
+        // Calculate commision
         switch (plan) {
             case "standard":
-                // 0.2% comision
-                feeInRON = amountInRON * 0.002;
+                fee = amount * 0.002;
                 break;
 
             case "student":
             case "gold":
-                // Fără comision
-                feeInRON = 0;
+                fee = 0;
                 break;
 
             case "silver":
-                // Fără comision pentru tranzacții < 500 RON, altfel 0.1%
-                if (amountInRON >= 500) {
-                    feeInRON = amountInRON * 0.001;
+                if (amount >= thresholdSilver) {
+                    fee = amount * 0.001;
                 }
                 break;
 
             default:
-                // Plan necunoscut -> fără comision
-                feeInRON = 0;
+                // unknown plan
+                fee = 0;
         }
 
-        // Convertim comisionul înapoi în moneda inițială
-        double fee = feeInRON;
-        if (!currency.equals("RON")) {
-            double conversionRate = ExchangeRate.getExchangeRate("RON", currency, exchangeRates);
-            fee = feeInRON / conversionRate;
-        }
-
-        // Rotunjim comisionul la 2 zecimale în currency-ul dat
         return fee;
     }
-
 
     public void cashWithdrawal(final CommandInput command, final ArrayNode output) {
         int timestamp = command.getTimestamp();
         User user = Tools.findUserByEmail(command.getEmail(), users);
 
-        if (user == null)
+        // Handle the "User not found" case
+        if (user == null) {
+            ObjectNode errorOutput = objectMapper.createObjectNode();
+            errorOutput.put("command", "cashWithdrawal");
+
+            ObjectNode errorDetails = objectMapper.createObjectNode();
+            errorDetails.put("description", "User not found");
+            errorDetails.put("timestamp", timestamp);
+
+            errorOutput.set("output", errorDetails);
+            errorOutput.put("timestamp", timestamp);
+
+            output.add(errorOutput);
             return;
+        }
 
         String cardNumber = command.getCardNumber();
         Card card = Tools.findCardByCardNumber(cardNumber, users);
 
-        // Handle the "Card not found" case directly in the output array
+        // Handle the "Card not found" case
         if (card == null) {
             ObjectNode errorOutput = objectMapper.createObjectNode();
             errorOutput.put("command", "cashWithdrawal");
@@ -932,8 +987,8 @@ public class BankSystem {
             errorOutput.set("output", errorDetails);
             errorOutput.put("timestamp", timestamp);
 
-            output.add(errorOutput); // Add error directly to the output
-            return; // Exit the function
+            output.add(errorOutput);
+            return;
         }
 
         Account account = card.getAccount();
@@ -942,25 +997,28 @@ public class BankSystem {
             return;
         }
 
-        double amountInRON = command.getAmount(); // Suma este dată în RON
+        double amountInRON = command.getAmount(); // the amount given in command input is in "RON"
 
-        // Calculate and add commission
+        // Calculate and add commission (still in "RON")
         double commission = calculateComision(user, amountInRON, "RON", exchangeRates);
         amountInRON += commission;
 
+        // Convert the amount + commision in user's currency
         double exchangeRate = ExchangeRate.getExchangeRate("RON", account.getCurrency(), exchangeRates);
-        double amountInAccountCurrency = amountInRON / exchangeRate;
+        double amountInAccountCurrency = amountInRON * exchangeRate;
 
-        // Check if sufficient balance is available
+        // Check if there are sufficient funds to perform withdrawal
         if (account.getBalance() >= amountInAccountCurrency) {
             account.spend(amountInAccountCurrency);
             transactionService.addWithdrawalTransaction(timestamp, user, amountInRON - commission);
+
+            // doar ca zice alina sa rotunjesc dupa fiecare operatie
+            account.setBalance(Math.round(account.getBalance() * 100.0) / 100.0) ;
         } else {
-            return; // Insufficient balance
+            transactionService.addInsufficientFundsTransaction(timestamp,
+                    "Insufficient funds", user, account.getIban());
         }
     }
-
-
 
 }
 

@@ -277,11 +277,34 @@ public class TransactionService {
         user.addTransaction(transaction);
     }
 
+    /**
+     * Creates and adds a transaction for cash withdrawal.
+     *
+     * @param timestamp The timestamp of the transaction.
+     * @param user The user performing the withdrawal.
+     * @param amount The amount to be withdrawn.
+     */
     public void addWithdrawalTransaction(final int timestamp, final User user,
                                                             final double amount) {
         Transaction transaction =
                 TransactionFactory.createWithdrawalTransaction(timestamp, amount);
         user.addTransaction(transaction);
     }
+
+    /**
+     * Creates and adds an interest transaction to the user's transaction list.
+     *
+     * @param timestamp the timestamp of the transaction.
+     * @param amount the amount of interest added.
+     * @param currency the currency in which the interest is added.
+     * @param user the user whose account received the interest.
+     */
+    public void addInterestTransaction(final int timestamp, final double amount,
+                                       final String currency, final User user) {
+        Transaction interestTransaction =
+                TransactionFactory.createInterestTransaction(timestamp, amount, currency);
+        user.addTransaction(interestTransaction);
+    }
+
 
 }

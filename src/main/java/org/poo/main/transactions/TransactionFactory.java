@@ -121,10 +121,12 @@ public final class TransactionFactory {
     public static Transaction createOnlinePaymentTransaction(
             final int timestamp, final String cardNumber,
             final double amount, final String commerciant, final String accountIBAN) {
+        double roundedAmount = Math.round(amount * 100.0) / 100.0;
+
         return new Transaction(
                 timestamp,
                 "Card payment",
-                null, null, amount,
+                null, null, roundedAmount,
                 null, null, null, null,
                 accountIBAN, commerciant, null, null,
                 null, null
@@ -343,6 +345,13 @@ public final class TransactionFactory {
         );
     }
 
+    /**
+     * Creates a transaction for cash withdrawal.
+     *
+     * @param timestamp The timestamp of the transaction.
+     * @param amount The amount of money to be withdrawn.
+     * @return The created cash withdrawal transaction.
+     */
     public static Transaction createWithdrawalTransaction(
             final int timestamp, final double amount) {
         return new Transaction(
@@ -354,6 +363,28 @@ public final class TransactionFactory {
                 null, null
         );
     }
+
+    /**
+     * Creates a transaction for adding interest to a savings account.
+     *
+     * @param timestamp The timestamp of the transaction.
+     * @param amount    The interest amount added to the account.
+     * @param currency  The currency of the transaction.
+     * @return The created interest transaction.
+     */
+    public static Transaction createInterestTransaction(
+            final int timestamp, final double amount, final String currency) {
+        return new Transaction(
+                timestamp,
+                "Interest rate income",
+                null, null, amount, currency,
+                null, null, null, null,
+                null, null, null,
+                null, null
+        );
+    }
+
+
 
 
 }

@@ -123,6 +123,35 @@ public abstract class Account {
     }
 
     /**
+     * Returns the current plan of the account.
+     * Designed for extension, subclasses can override this method.
+     *
+     * @return the account plan
+     */
+    public String getAccountPlan() {
+        return accountPlan;
+    }
+
+    /**
+     * Sets the account plan.
+     *
+     * @param accountPlan the new account plan
+     */
+    public void setAccountPlan(final String accountPlan) {
+        this.accountPlan = accountPlan;
+    }
+
+    /**
+     * Sets the balance of the account.
+     * Designed for extension, subclasses can override this method.
+     *
+     * @param amount the new balance to set
+     */
+    public void setBalance(double amount) {
+        this.balance = amount;
+    }
+
+    /**
      * Adds a card to the list of cards associated with the account.
      *
      * @param card the card to add
@@ -176,16 +205,4 @@ public abstract class Account {
         return false;
     }
 
-    public String getAccountPlan() {
-        return accountPlan;
-    }
-
-    /**
-     * Sets the account plan.
-     *
-     * @param accountPlan the new account plan
-     */
-    public void setAccountPlan(final String accountPlan) {
-        this.accountPlan = accountPlan;
-    }
 }

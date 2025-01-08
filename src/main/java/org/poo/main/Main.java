@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.poo.checker.Checker;
 import org.poo.checker.CheckerConstants;
 import org.poo.fileio.ObjectInput;
+import org.poo.main.Commerciant.Commerciant;
 import org.poo.main.bank.BankSystem;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.user.User;

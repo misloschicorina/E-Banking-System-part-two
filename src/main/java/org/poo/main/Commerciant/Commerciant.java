@@ -1,4 +1,4 @@
-package org.poo.main;
+package org.poo.main.Commerciant;
 
 /**
  * Represents a commerciant in the banking system.

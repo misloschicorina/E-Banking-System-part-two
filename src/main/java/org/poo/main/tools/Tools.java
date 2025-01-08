@@ -8,16 +8,16 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import org.poo.fileio.CommandInput;
-import org.poo.main.Commerciant;
+import org.poo.main.Commerciant.Commerciant;
 import org.poo.main.cards.Card;
 import org.poo.main.accounts.Account;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.transactions.Transaction;
 import org.poo.main.transactions.TransactionFilter;
 import org.poo.main.user.User;
-
-import static org.poo.main.exchange_rate.ExchangeRate.convertToRON;
 
 public final class Tools {
 
@@ -109,7 +109,12 @@ public final class Tools {
         for (Account account : accounts) {
             ObjectNode accountNode = ObjectMapper.createObjectNode();
             accountNode.put("IBAN", account.getIban());
-            accountNode.put("balance", account.getBalance());
+//            // am inlocuit asta:
+//             accountNode.put("balance", account.getBalance());
+//            // cu asta aproximat:
+            double roundedBalance = Math.round(account.getBalance() * 100.0) / 100.0;
+            accountNode.put("balance", roundedBalance);
+
             accountNode.put("currency", account.getCurrency());
             accountNode.put("type", account.getAccountType());
 
@@ -183,12 +188,6 @@ public final class Tools {
      * @param transactions the list of transactions
      * @return a JSON array representing the transactions
      */
-    /**
-     * Converts a list of transactions into a JSON array.
-     *
-     * @param transactions the list of transactions
-     * @return a JSON array representing the transactions
-     */
     public static ArrayNode getTransactions(final List<Transaction> transactions) {
         // Create the array to hold transaction nodes
         ArrayNode transactionsArray = ObjectMapper.createArrayNode();
@@ -196,15 +195,27 @@ public final class Tools {
         for (Transaction transaction : transactions) {
             ObjectNode transactionNode = ObjectMapper.createObjectNode();
 
-            // Add common fields for all transactions
-            transactionNode.put("description", transaction.getDescription());
+            // Add timestamp at the beginning for all transactions
             transactionNode.put("timestamp", transaction.getTimestamp());
 
+            // Add description field after timestamp
+            transactionNode.put("description", transaction.getDescription());
+
+            if ("Interest rate income".equals(transaction.getDescription())) {
+                // Add separate fields for amount and currency
+                if (transaction.getAmount() != null) {
+                    transactionNode.put("amount", transaction.getAmount());
+                }
+                if (transaction.getCurrency() != null) {
+                    transactionNode.put("currency", transaction.getCurrency());
+                }
+            }
+
             // Handle specific format for cash withdrawals
-            if (transaction.getDescription().startsWith("Cash withdrawal")) {
+             else if (transaction.getDescription().startsWith("Cash withdrawal")) {
                 // Format the amount as an integer for cash withdrawals
                 if (transaction.getAmount() != null) {
-                    transactionNode.put("amount", (int) transaction.getAmount().doubleValue());
+                    transactionNode.put("amount", transaction.getAmount().doubleValue());
                 }
             }
             // Handle upgrade plan transactions
@@ -222,7 +233,6 @@ public final class Tools {
                 }
 
                 // Add amount, currency, and involved accounts fields to the transaction node
-                transactionNode.put("description", transaction.getDescription());
                 transactionNode.put("amount", transaction.getAmount());
                 transactionNode.put("currency", transaction.getCurrency());
                 transactionNode.set("involvedAccounts", involvedAccountsArray);
@@ -272,7 +282,6 @@ public final class Tools {
         }
         return transactionsArray;
     }
-
 
 
     /**
@@ -361,7 +370,12 @@ public final class Tools {
 
         // Add general account information
         outputNode.put("IBAN", iban);
-        outputNode.put("balance", findAccountByIBAN(iban, List.of(user)).getBalance());
+        //outputNode.put("balance", findAccountByIBAN(iban, List.of(user)).getBalance());
+        double balance = findAccountByIBAN(iban, List.of(user)).getBalance();
+        balance = Math.round(balance * 100.0) / 100.0;
+        outputNode.put("balance", balance);
+
+
         outputNode.put("currency", findAccountByIBAN(iban, List.of(user)).getCurrency());
 
         // AAdd filtered transactions to the output node
@@ -561,6 +575,15 @@ public final class Tools {
             }
         }
         return null; // Cardul nu a fost găsit
+    }
+
+    public static Commerciant findCommerciantByName(String name, final List<Commerciant> commerciants) {
+        for (Commerciant commerciant : commerciants) {
+            if (commerciant.getName().equalsIgnoreCase(name)) {
+                return commerciant;
+            }
+        }
+        return null;
     }
 
 
