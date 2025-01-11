@@ -111,18 +111,6 @@ public final class ExchangeRate {
     }
 
     /**
-     * Extracts the distinct list of currencies from the input.
-     */
-    private static List<String> getCurrencies(final List<ExchangeRate> exchangeRates) {
-        Set<String> currencySet = new HashSet<>();
-        for (ExchangeRate rate : exchangeRates) {
-            currencySet.add(rate.getFrom());
-            currencySet.add(rate.getTo());
-        }
-        return new ArrayList<>(currencySet);
-    }
-
-    /**
      * Converts an amount to RON based on exchange rates.
      */
     public static double convertToRON(final double amount, final String currency,

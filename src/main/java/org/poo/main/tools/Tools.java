@@ -8,11 +8,10 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import org.poo.fileio.CommandInput;
 import org.poo.main.Commerciant.Commerciant;
 import org.poo.main.cards.Card;
+import org.poo.main.split.SplitPayment;
 import org.poo.main.accounts.Account;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.transactions.Transaction;
@@ -109,11 +108,7 @@ public final class Tools {
         for (Account account : accounts) {
             ObjectNode accountNode = ObjectMapper.createObjectNode();
             accountNode.put("IBAN", account.getIban());
-//            // am inlocuit asta:
-//             accountNode.put("balance", account.getBalance());
-//            // cu asta aproximat:
-            double roundedBalance = Math.round(account.getBalance() * 100.0) / 100.0;
-            accountNode.put("balance", roundedBalance);
+             accountNode.put("balance", account.getBalance());
 
             accountNode.put("currency", account.getCurrency());
             accountNode.put("type", account.getAccountType());
@@ -170,16 +165,21 @@ public final class Tools {
     public static double calculateFinalAmount(final Account account, final double amount,
                                               final List<ExchangeRate> exchangeRates,
                                               final String currency) {
-        double finalAmount = amount;
-
-        if (!account.getCurrency().equals(currency)) {
-            double rate = getExchangeRate(currency, account.getCurrency(), exchangeRates);
-            if (rate == 0) {
-                return 0;
-            }
-            finalAmount = amount * rate;
+        // Dacă moneda contului este deja aceeași cu moneda splitului, returnăm direct suma
+        if (account.getCurrency().equals(currency)) {
+            return amount;
         }
-        return finalAmount;
+
+        // Obținem rata de schimb pentru conversie
+        double rate = getExchangeRate(currency, account.getCurrency(), exchangeRates);
+
+        // Verificăm dacă rata de schimb este validă
+        if (rate == 0) {
+            throw new IllegalArgumentException("Exchange rate not found for " + currency + " to " + account.getCurrency());
+        }
+
+        // Convertim suma în moneda contului
+        return amount * rate;
     }
 
     /**
@@ -201,7 +201,61 @@ public final class Tools {
             // Add description field after timestamp
             transactionNode.put("description", transaction.getDescription());
 
-            if ("Interest rate income".equals(transaction.getDescription())) {
+            // Handle split payment transactions
+            if (transaction.getDescription().startsWith("Split payment")) {
+                // Add currency
+                transactionNode.put("currency", transaction.getCurrency());
+
+                // Add amountForUsers as an array
+                ArrayNode amountsForUsersArray = ObjectMapper.createArrayNode();
+                if (transaction.getAmountForUsers() != null ) {
+                    if (transaction.getSplitPaymentType().equals("custom")) {
+                        for (Double amount : transaction.getAmountForUsers()) {
+                            amountsForUsersArray.add(amount);
+                        }
+                        transactionNode.set("amountForUsers", amountsForUsersArray);
+                    }
+                    else { // equal type
+                        double amount = transaction.getAmountForUsers().get(0);
+                        transactionNode.put("amount", amount);
+
+                    }
+                }
+
+
+                // Add involved accounts as an array
+                ArrayNode involvedAccountsArray = ObjectMapper.createArrayNode();
+                if (transaction.getInvolvedAccounts() != null) {
+                    for (String account : transaction.getInvolvedAccounts()) {
+                        involvedAccountsArray.add(account);
+                    }
+                }
+                transactionNode.set("involvedAccounts", involvedAccountsArray);
+
+                // Add split payment type
+                transactionNode.put("splitPaymentType", transaction.getSplitPaymentType());
+
+                if (transaction.getError() != null) {
+                    transactionNode.put("error", transaction.getError());
+                }
+            }
+
+            // Handle specific format for cash withdrawals
+            else if (transaction.getDescription().startsWith("Cash withdrawal")) {
+                // Format the amount as an integer for cash withdrawals
+                if (transaction.getAmount() != null) {
+                    transactionNode.put("amount", transaction.getAmount().doubleValue());
+                }
+            }
+
+            // Handle upgrade plan transactions
+            else if ("Upgrade plan".equals(transaction.getDescription())) {
+                transactionNode.put("accountIBAN", transaction.getAccountIBAN());
+                transactionNode.put("newPlanType", transaction.getPlan());
+            }
+
+            // Handle interest rate income transactions
+            else if ("Interest rate income".equals(transaction.getDescription())) {
                 // Add separate fields for amount and currency
                 if (transaction.getAmount() != null) {
                     transactionNode.put("amount", transaction.getAmount());
@@ -211,37 +265,6 @@ public final class Tools {
                 }
             }
 
-            // Handle specific format for cash withdrawals
-             else if (transaction.getDescription().startsWith("Cash withdrawal")) {
-                // Format the amount as an integer for cash withdrawals
-                if (transaction.getAmount() != null) {
-                    transactionNode.put("amount", transaction.getAmount().doubleValue());
-                }
-            }
-            // Handle upgrade plan transactions
-            else if ("Upgrade plan".equals(transaction.getDescription())) {
-                transactionNode.put("accountIBAN", transaction.getAccountIBAN());
-                transactionNode.put("newPlanType", transaction.getPlan());
-            }
-            // Handle split payments
-            else if (transaction.getInvolvedAccounts() != null
-                    && !transaction.getInvolvedAccounts().isEmpty()) {
-                // Create an array for involved accounts
-                ArrayNode involvedAccountsArray = ObjectMapper.createArrayNode();
-                for (String account : transaction.getInvolvedAccounts()) {
-                    involvedAccountsArray.add(account);
-                }
-
-                // Add amount, currency, and involved accounts fields to the transaction node
-                transactionNode.put("amount", transaction.getAmount());
-                transactionNode.put("currency", transaction.getCurrency());
-                transactionNode.set("involvedAccounts", involvedAccountsArray);
-
-                // Check if there is an error field
-                if (transaction.getError() != null) {
-                    transactionNode.put("error", transaction.getError());
-                }
-            }
             // Default handling for other transactions
             else {
                 if ("The card has been destroyed".equals(transaction.getDescription())
@@ -282,7 +305,6 @@ public final class Tools {
         }
         return transactionsArray;
     }
-
 
     /**
      * Validates the user and account by checking if the account exists
@@ -372,7 +394,6 @@ public final class Tools {
         outputNode.put("IBAN", iban);
         //outputNode.put("balance", findAccountByIBAN(iban, List.of(user)).getBalance());
         double balance = findAccountByIBAN(iban, List.of(user)).getBalance();
-        balance = Math.round(balance * 100.0) / 100.0;
         outputNode.put("balance", balance);
 
 
@@ -584,6 +605,53 @@ public final class Tools {
             }
         }
         return null;
+    }
+
+    public static String verifyAmounts(SplitPayment splitPayment, List<ExchangeRate> exchangeRates, List<User> users) {
+        List<String> accounts = splitPayment.getAccounts();
+        List<Double> amounts = splitPayment.getAmounts();
+        String currency = splitPayment.getCurrency();
+
+        for (int i = 0; i < accounts.size(); i++) {
+            String accountIBAN = accounts.get(i);
+            double amount = amounts.get(i);
+
+            if (splitPayment.getAmounts().size() == 3) {
+                System.out.println("Accounts in SplitPayment: " + splitPayment.getAccounts());
+                System.out.println("Amounts in SplitPayment: " + splitPayment.getAmounts());
+            }
+
+            // Obținem contul utilizând IBAN-ul
+            Account account = Tools.findAccountByIBAN(accountIBAN, users);
+
+            if (account == null) {
+                throw new IllegalArgumentException("Account with IBAN " + accountIBAN + " not found.");
+            }
+
+            if (splitPayment.getAmounts().size() == 3) {
+                System.out.println("Accounts in SplitPayment: " + splitPayment.getAccounts());
+                System.out.println("Amounts in SplitPayment: " + splitPayment.getAmounts());
+            }
+
+            // Convertim suma în moneda contului
+            double convertedAmount = Tools.calculateFinalAmount(account, amount, exchangeRates, currency);
+
+            // Verificăm dacă balanța contului este suficientă
+            if (account.getBalance() < convertedAmount) {
+                return accountIBAN; // Returnăm IBAN-ul contului care nu are suficiente fonduri
+            }
+        }
+
+        return null; // To
+    }
+
+    public static void removeSplitPaymentFromUsers(final SplitPayment splitPayment, final List<User> users) {
+        for (String iban : splitPayment.getAccounts()) {
+            User user = findUserByAccount(iban, users);
+            if (user != null) {
+                user.removePendingSplitPayment(splitPayment);
+            }
+        }
     }
 
 

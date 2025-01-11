@@ -24,12 +24,15 @@ public class Transaction {
     private List<String> involvedAccounts;
     private String error;
     private String plan;
+    private String splitPaymentType; // Nou câmp pentru tipul de split payment
+    private List<Double> amountForUsers; // Nou câmp pentru sumele aferente utilizatorilor
 
     public Transaction(final int timestamp, final String description, final String senderIBAN,
                        final String receiverIBAN, final Double amount, final String currency,
                        final String transferType, final String cardNumber, final String cardHolder,
                        final String accountIBAN, final String commerciant, final String email,
-                       final List<String> involvedAccounts, final String error, final String plan) {
+                       final List<String> involvedAccounts, final String error, final String plan,
+                       final String splitPaymentType, final List<Double> amountForUsers) {
         this.timestamp = timestamp;
         this.description = description;
         this.senderIBAN = senderIBAN;
@@ -45,6 +48,8 @@ public class Transaction {
         this.involvedAccounts = involvedAccounts;
         this.error = error;
         this.plan = plan;
+        this.splitPaymentType = splitPaymentType;
+        this.amountForUsers = amountForUsers;
     }
 
     /**
@@ -166,5 +171,15 @@ public class Transaction {
 
     public String getPlan() {
         return plan;
+    }
+
+    // Getter pentru splitPaymentType
+    public String getSplitPaymentType() {
+        return splitPaymentType;
+    }
+
+    // Getter pentru amountForUsers
+    public List<Double> getAmountForUsers() {
+        return amountForUsers;
     }
 }

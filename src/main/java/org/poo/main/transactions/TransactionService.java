@@ -197,19 +197,20 @@ public class TransactionService {
      * Creates and adds a successful split transaction to the user's transaction list.
      *
      * @param timestamp the timestamp of the transaction.
-     * @param amount the total amount of the payment.
-     * @param splitAmount the amount that each recipient receives.
+     * @param totalAmount the total amount of the payment.
+     * @param amountsForUsers the list of amounts assigned to each user.
      * @param currency the currency of the transaction.
      * @param accounts the list of accounts that the payment is split between.
+     * @param splitPaymentType the type of split payment (e.g., "equal" or "custom").
      * @param user the user who initiated the split payment.
      */
-    public void addSuccessSplitTransaction(final int timestamp, final double amount,
-                                           final double splitAmount, final String currency,
-                                           final List<String> accounts, final User user) {
-        Transaction splitTransaction =
-                TransactionFactory.createSuccessSplitTransaction(timestamp,
-                        amount, splitAmount, currency, accounts);
-        user.addTransaction(splitTransaction);
+    public void addSuccessSplitTransaction(final int timestamp, final double totalAmount,
+                                           final List<Double> amountsForUsers, final String currency,
+                                           final List<String> accounts, final String splitPaymentType,
+                                           final User user) {
+        Transaction splitTransaction = TransactionFactory.createSuccessSplitTransaction(
+                timestamp, totalAmount, amountsForUsers, currency, accounts, splitPaymentType);
+        user.addTransactionByTimestamp(splitTransaction);
     }
 
     /**
@@ -226,25 +227,24 @@ public class TransactionService {
         user.addTransaction(interestRateChangeTransaction);
     }
 
-    /**
-     * Creates and adds a split payment error transaction to the user's transaction list.
-     *
-     * @param timestamp the timestamp of the transaction.
-     * @param splitAmount the split amount for the error.
-     * @param totalAmount the total amount of the payment.
-     * @param currency the currency of the transaction.
-     * @param cheapIBAN the IBAN involved in the error.
-     * @param accounts the list of accounts the payment was supposed to be split between.
-     * @param user the user who encountered the error.
-     */
-    public void addSplitErrorTransaction(final int timestamp, final double splitAmount,
-                                         final double totalAmount, final String currency,
+
+    public void addSplitErrorTransaction(final int timestamp, final double totalAmount,
+                                         final List<Double> amountsForUsers, final String currency,
                                          final String cheapIBAN, final List<String> accounts,
-                                         final User user) {
-        Transaction splitTransaction =
-                TransactionFactory.createSplitErrorTransaction(splitAmount,
-                        timestamp, totalAmount, currency, cheapIBAN, accounts);
-        user.addTransaction(splitTransaction);
+                                         final String splitPaymentType, final User user) {
+        // Creăm tranzacția de eroare folosind metoda din TransactionFactory
+        Transaction splitTransaction = TransactionFactory.createSplitErrorTransaction(
+                totalAmount,              // Totalul
+                timestamp,                // Timestamp-ul tranzacției
+                amountsForUsers,          // Lista sumelor alocate fiecărui cont
+                currency,                 // Moneda
+                cheapIBAN,                // Contul cu fonduri insuficiente
+                accounts,                 // Conturile implicate
+                splitPaymentType          // Tipul split payment-ului
+        );
+
+        // Adăugăm tranzacția în lista utilizatorului, menținând ordinea după timestamp
+        user.addTransactionByTimestamp(splitTransaction);
     }
 
     /**

@@ -1,7 +1,7 @@
 package org.poo.main.Commerciant;
 
 /**
- * Represents a commerciant in the banking system.
+ * Represents a commerciant (merchant) in the banking system.
  */
 public final class Commerciant {
 
@@ -22,10 +22,6 @@ public final class Commerciant {
 
     public String getName() {
         return name;
-    }
-
-    public void setName(final String name) {
-        this.name = name;
     }
 
     public int getId() {

@@ -1,8 +1,8 @@
 package org.poo.main.bank;
 
 import org.poo.main.Commerciant.Commerciant;
-import org.poo.main.cards.Card;
-import org.poo.main.cards.OneTimeCard;
+import org.poo.main.split.SplitPayment;
+import org.poo.main.cards.*;
 import org.poo.main.accounts.Account;
 import org.poo.main.accounts.ClassicAccount;
 import org.poo.main.accounts.SavingsAccount;
@@ -11,6 +11,7 @@ import org.poo.main.tools.Tools;
 import org.poo.main.transactions.*;
 import org.poo.main.user.User;
 import org.poo.utils.Utils;
+import org.poo.main.split.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -19,6 +20,7 @@ import org.poo.fileio.CommandInput;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class BankSystem {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -59,7 +61,9 @@ public class BankSystem {
                 case "printTransactions" -> printTransactions(command, output);
                 case "setMinimumBalance" -> setMinimumBalance(command);
                 case "checkCardStatus" -> checkCardStatus(command, output);
-                // case "splitPayment" -> splitPayment(command);
+                case "splitPayment" -> splitPayment(command);
+                case "acceptSplitPayment" -> acceptSplitPayment(command);
+                case "rejectSplitPayment" -> rejectSplitPayment(command);
                 case "report" -> report(command, output);
                 case "spendingsReport" -> spendingsReport(command, output);
                 case "addInterest" -> addInterest(command, output);
@@ -138,9 +142,12 @@ public class BankSystem {
         Account account = Tools.findAccountByIBAN(command.getAccount(), users);
 
         if (account != null) {
-            // Generate a new card number and create a new Card object
+            // Generate a unique card number
             String cardNumber = org.poo.utils.Utils.generateCardNumber();
-            Card card = new Card(user, account, cardNumber);
+
+            // Use the factory to create a standard card
+            CardFactory cardFactory = new StandardCardFactory();
+            Card card = cardFactory.createCard(user, account, cardNumber);
 
             // Add the card to the user's account
             account.addCard(card);
@@ -161,9 +168,12 @@ public class BankSystem {
         Account account = Tools.findAccountByIBAN(command.getAccount(), users);
 
         if (account != null) {
-            // Generate a new card number and create a new OneTimeCard object
+            // Generate a unique card number
             String cardNumber = org.poo.utils.Utils.generateCardNumber();
-            OneTimeCard oneTimeCard = new OneTimeCard(user, account, cardNumber);
+
+            // Use the factory to create a one-time card
+            CardFactory cardFactory = new OneTimeCardFactory();
+            Card oneTimeCard = cardFactory.createCard(user, account, cardNumber);
 
             // Add the one-time card to the user's account
             account.addCard(oneTimeCard);
@@ -336,8 +346,6 @@ public class BankSystem {
             System.out.println("Cashback aplicat: " + cashback + " " + accountCurrency);
         }
 
-        // doar ca zice alina sa rotunjesc dupa fiecare operatie
-        account.setBalance(Math.round(account.getBalance() * 100.0) / 100.0) ;
 
     }
 
@@ -370,8 +378,6 @@ public class BankSystem {
             Commerciant commerciantt = Tools.findCommerciantByName(commerciant, commerciants);
             // Adaug tranzactia in mapul userului cu comercianti ca sa stiu nr de tranzactii si totalspend
             user.addTransactionToCommerciant(commerciantt, amount, currency, account.getCurrency(), exchangeRates);
-
-            System.out.println("platesc pe bune :" + finalAmount +" in moneda:" + currency);
 
             // Add the transaction to the user's transaction list
             transactionService.addOnlinePaymentTransaction(timestamp,
@@ -493,8 +499,6 @@ public class BankSystem {
         transactionService.addReceivedMoneyTransaction(timestamp, senderAccount,
                 receiverAccount, amount, exchangeRate, receiverAccount.getCurrency(), description);
 
-        // doar ca zice alina sa rotunjesc dupa fiecare operatie
-        senderAccount.setBalance(Math.round(senderAccount.getBalance() * 100.0) / 100.0) ;
     }
 
     private void sendMoneyError(final String description, final int timestamp, final ArrayNode output) {
@@ -617,53 +621,146 @@ public class BankSystem {
         output.add(resultNode);
     }
 
-//    private void splitPayment(final CommandInput command) {
-//        List<String> ibans = command.getAccounts();
-//        double totalAmount = command.getAmount();
-//        double splitAmount = totalAmount / ibans.size();
-//        String currency = command.getCurrency();
-//        int timestamp = command.getTimestamp();
-//        String splitType = command.getSplitPaymentType();
-//
-//        boolean canDoSplit = true;
-//        String cheapIBAN = null;
-//
-//        // Check all IBANs to see if each account has enough balance for the split payment
-//        for (String iban : ibans) {
-//            Account account = Tools.findAccountByIBAN(iban, users);
-//            double finalSplitAmount =
-//                    Tools.calculateFinalAmount(account, splitAmount, exchangeRates, currency);
-//
-//            if (account.getBalance() < finalSplitAmount) {
-//                canDoSplit = false;
-//                cheapIBAN = iban;
-//                // We will store as cheap IBAN the last IBAN found that doesn't have funds
-//            }
-//        }
-//
-//        if (canDoSplit) {
-//            for (String iban : ibans) {
-//                Account account = Tools.findAccountByIBAN(iban, users);
-//                User currUser = Tools.findUserByAccount(iban, users);
-//                double finalSplitAmount =
-//                        Tools.calculateFinalAmount(account, splitAmount, exchangeRates, currency);
-//                account.spend(finalSplitAmount);
-//
-//                // Add the new card transaction to the user's transaction list
-//                transactionService.addSuccessSplitTransaction(timestamp,
-//                        totalAmount, splitAmount, currency, ibans, currUser);
-//            }
-//        } else {
-//            // Create and add an error transaction for each user involved
-//            for (String iban : ibans) {
-//                User user = Tools.findUserByAccount(iban, users);
-//                if (user != null) {
-//                    transactionService.addSplitErrorTransaction(timestamp,
-//                            splitAmount, totalAmount, currency, cheapIBAN, ibans, user);
-//                }
-//            }
-//        }
-//    }
+    private void splitPayment(final CommandInput command) {
+        List<String> ibans = command.getAccounts();
+        String splitType = command.getSplitPaymentType();
+        double totalAmount = command.getAmount();
+        String currency = command.getCurrency();
+        int timestamp = command.getTimestamp();
+
+        SplitPayment splitPayment = new SplitPayment(splitType, currency, timestamp);
+
+        // Add IBANs to the SplitPayment
+        for (String iban : ibans) {
+            splitPayment.addAccount(iban);
+        }
+
+        // Choose the appropriate strategy based on the split type
+        SplitStrategy strategy;
+        switch (splitType) {
+            case "equal" -> strategy = new EqualSplitStrategy();
+            case "custom" -> strategy = new CustomSplitStrategy();
+            default -> throw new IllegalArgumentException("Invalid split payment type");
+        }
+
+        // Calculate the amounts using the chosen strategy
+        List<Double> amounts = strategy.calculateSplit(totalAmount, ibans, command);
+
+        // Add the calculated amounts to the SplitPayment
+        for (double amount : amounts) {
+            splitPayment.addAmount(amount);
+        }
+
+        // Add the transaction to the pending list for each user
+        for (String iban : ibans) {
+            User user = Tools.findUserByAccount(iban, users);
+            if (user != null) {
+                user.addPendingSplitPayment(splitPayment);
+            }
+        }
+    }
+
+    private void acceptSplitPayment(final CommandInput command) {
+        String email = command.getEmail();
+
+        User user = Tools.findUserByEmail(email, users);
+        if (user == null) {
+            return;
+        }
+
+        // Retrieve the oldest unaccepted split payment transaction
+        Map.Entry<SplitPayment, String> paymentEntry = user.getOldestUnacceptedTransaction();
+        if (paymentEntry == null) {
+            return;
+        }
+
+        String userIban = paymentEntry.getValue();
+        SplitPayment splitPayment = paymentEntry.getKey();
+
+        // Mark the user's acceptance for the split payment
+        splitPayment.setStatus(userIban, true);
+
+        // Check if all users have accepted
+        if (splitPayment.allAccepted()) {
+            String insufficientFundsIBAN = Tools.verifyAmounts(splitPayment, exchangeRates, users);
+
+            if (insufficientFundsIBAN != null) {
+                handleErrorSplitPayment(splitPayment, insufficientFundsIBAN);
+            } else {
+                processSplitPayment(splitPayment);
+            }
+        }
+    }
+
+    private void processSplitPayment(final SplitPayment splitPayment) {
+        // Create and add success transactions for all involved users
+        for (String iban : splitPayment.getAccounts()) {
+            User involvedUser = Tools.findUserByAccount(iban, users);
+            if (involvedUser != null) {
+                transactionService.addSuccessSplitTransaction(
+                        splitPayment.getTimestamp(),
+                        splitPayment.getAmounts().stream().mapToDouble(Double::doubleValue).sum(),
+                        splitPayment.getAmounts(),
+                        splitPayment.getCurrency(),
+                        splitPayment.getAccounts(),
+                        splitPayment.getSplitPaymentType(),
+                        involvedUser
+                );
+            }
+        }
+
+        // Deduct the amounts from each account
+        for (int i = 0; i < splitPayment.getAccounts().size(); i++) {
+            String iban = splitPayment.getAccounts().get(i);
+            Account account = Tools.findAccountByIBAN(iban, users);
+            double amount = splitPayment.getAmounts().get(i);
+            String currency = splitPayment.getCurrency();
+            double convertedAmount = Tools.calculateFinalAmount(account, amount, exchangeRates, currency);
+            account.spend(convertedAmount);
+        }
+
+        // Remove the completed split payment from all users
+        Tools.removeSplitPaymentFromUsers(splitPayment, users);
+    }
+
+    private void handleErrorSplitPayment(final SplitPayment splitPayment, final String insufficientFundsIBAN) {
+        // Create and add error transactions for all involved users
+        for (String iban : splitPayment.getAccounts()) {
+            User involvedUser = Tools.findUserByAccount(iban, users);
+            if (involvedUser != null) {
+                transactionService.addSplitErrorTransaction(
+                        splitPayment.getTimestamp(),
+                        splitPayment.getAmounts().stream().mapToDouble(Double::doubleValue).sum(),
+                        splitPayment.getAmounts(),
+                        splitPayment.getCurrency(),
+                        insufficientFundsIBAN,
+                        splitPayment.getAccounts(),
+                        splitPayment.getSplitPaymentType(),
+                        involvedUser
+                );
+            }
+        }
+
+        // Remove the failed split payment from all users
+        Tools.removeSplitPaymentFromUsers(splitPayment, users);
+    }
+
+    private void rejectSplitPayment(final CommandInput command) {
+        String email = command.getEmail();
+
+        User user = Tools.findUserByEmail(email, users);
+        if (user == null) {
+            return;
+        }
+
+        // Retrieve the oldest pending split payment
+        SplitPayment splitPayment = user.getOldestPendingTransaction();
+
+        if (splitPayment != null) {
+            // Remove the split payment from all involved users
+            Tools.removeSplitPaymentFromUsers(splitPayment, users);
+        }
+    }
 
     private void report(final CommandInput command, final ArrayNode output) {
         ObjectNode reportNode = objectMapper.createObjectNode();
@@ -1011,9 +1108,6 @@ public class BankSystem {
         if (account.getBalance() >= amountInAccountCurrency) {
             account.spend(amountInAccountCurrency);
             transactionService.addWithdrawalTransaction(timestamp, user, amountInRON - commission);
-
-            // doar ca zice alina sa rotunjesc dupa fiecare operatie
-            account.setBalance(Math.round(account.getBalance() * 100.0) / 100.0) ;
         } else {
             transactionService.addInsufficientFundsTransaction(timestamp,
                     "Insufficient funds", user, account.getIban());

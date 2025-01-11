@@ -25,7 +25,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, accountIBAN,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -47,7 +47,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, cardNumber, email,
                 accountIBAN, null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -72,7 +72,7 @@ public final class TransactionFactory {
                 amount, currency,
                 "sent", null, null,
                 null, null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -104,7 +104,7 @@ public final class TransactionFactory {
                 finalAmount, currency,
                 "received", null, null,
                 null, null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -121,15 +121,13 @@ public final class TransactionFactory {
     public static Transaction createOnlinePaymentTransaction(
             final int timestamp, final String cardNumber,
             final double amount, final String commerciant, final String accountIBAN) {
-        double roundedAmount = Math.round(amount * 100.0) / 100.0;
-
         return new Transaction(
                 timestamp,
                 "Card payment",
-                null, null, roundedAmount,
+                null, null, amount,
                 null, null, null, null,
                 accountIBAN, commerciant, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -148,7 +146,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, accountIBAN,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -170,7 +168,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, cardNumber, email,
                 accountIBAN, null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -190,7 +188,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, accountIBAN,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -209,51 +207,34 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, accountIBAN,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
-    /**
-     * Creates a successful split payment transaction.
-     *
-     * @param timestamp   The timestamp of the transaction.
-     * @param amount      The total amount of the payment.
-     * @param splitAmount The amount each recipient receives.
-     * @param currency    The currency of the transaction.
-     * @param accounts    A list of IBANs involved in the transaction.
-     * @return The created transaction.
-     */
     public static Transaction createSuccessSplitTransaction(
-            final int timestamp, final double amount, final double splitAmount,
-            final String currency, final List<String> accounts) {
-        String formattedAmount = String.format("%.2f", amount);
+            final int timestamp, final double totalAmount, final List<Double> amountsForUsers,
+            final String currency, final List<String> accounts, final String splitPaymentType) {
+        String formattedAmount = String.format("%.2f", totalAmount);
         return new Transaction(
                 timestamp,
                 "Split payment of " + formattedAmount + " " + currency,
-                null, null, splitAmount, currency,
+                null, null, null, currency,
                 null, null, null, null,
                 null, null, accounts,
-                null, null
+                null, null,
+                splitPaymentType, // Tipul split payment-ului (e.g., "equal", "custom")
+                amountsForUsers   // Lista cu sumele asociate fiecărui utilizator
         );
     }
 
-    /**
-     * Creates an error transaction for a split payment.
-     *
-     * @param totalAmount The total amount of the payment.
-     * @param timestamp   The timestamp of the transaction.
-     * @param splitAmount The amount each recipient receives.
-     * @param currency    The currency of the transaction.
-     * @param cheapIban   The IBAN with insufficient funds.
-     * @param accounts    A list of IBANs involved in the transaction.
-     * @return The created transaction.
-     */
     public static Transaction createSplitErrorTransaction(
             final double totalAmount, final int timestamp,
-            final double splitAmount, final String currency,
-            final String cheapIban, final List<String> accounts) {
+            final List<Double> amountsForUsers, final String currency,
+            final String cheapIban, final List<String> accounts,
+            final String splitPaymentType) {
+
         String description = "Split payment of "
-                + String.format("%.2f", splitAmount) + " " + currency;
+                + String.format("%.2f", totalAmount) + " " + currency;
         String errorMessage = "Account " + cheapIban
                 + " has insufficient funds for a split payment.";
 
@@ -262,10 +243,12 @@ public final class TransactionFactory {
                 description,
                 null, null, totalAmount, currency,
                 null, null, null, null,
-                null, null, accounts, errorMessage, null
+                null, null, accounts, errorMessage,
+                null,                         // Valoare pentru `plan`
+                splitPaymentType,             // Tipul split payment-ului
+                amountsForUsers               // Lista sumelor pentru utilizatori
         );
     }
-
 
     /**
      * Creates a transaction for an error when deleting an account.
@@ -281,7 +264,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, null,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -300,7 +283,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, null,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -319,7 +302,7 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, null, null,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -341,7 +324,7 @@ public final class TransactionFactory {
                 null, null, null, accountIBAN,
                 null, null, null,
                 null,
-                newPlanType
+                newPlanType, null, null
         );
     }
 
@@ -360,7 +343,7 @@ public final class TransactionFactory {
                 null, null, amount, null,
                 null, null, null, null,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 
@@ -380,7 +363,7 @@ public final class TransactionFactory {
                 null, null, amount, currency,
                 null, null, null, null,
                 null, null, null,
-                null, null
+                null, null, null, null
         );
     }
 

@@ -2,18 +2,16 @@ package org.poo.main.user;
 
 import org.poo.main.CashbackInfo;
 import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.split.SplitPayment;
 import org.poo.main.accounts.Account;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.transactions.Transaction;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
 
 /**
  * Represents a user in the banking system.
@@ -28,9 +26,11 @@ public final class User {
     private String accountPlan;
     private List<Account> accounts; // Accounts linked to the user
     private List<Transaction> transactions; // Transactions performed by the user
-    Map<Commerciant, CashbackInfo> cashbackInfo;  // Key = numele comerciantului, Value = informații despre cashback
+    private final Map<Commerciant, CashbackInfo> cashbackInfo;
+    private final List<SplitPayment> pendingTransactions;
 
     private static final int MIN_AGE = 21;
+    private static final double THRESHOLD_100 = 100.0;
 
     public User(final String firstName, final String lastName, final String email,
                 final String birthDate, final String occupation) {
@@ -42,6 +42,7 @@ public final class User {
         this.accounts = new ArrayList<>();
         this.transactions = new ArrayList<>();
         this.cashbackInfo = new HashMap<>();
+        this.pendingTransactions = new ArrayList<>();
 
         if ("student".equals(occupation))
             this.accountPlan = "student";
@@ -97,6 +98,10 @@ public final class User {
         this.accountPlan = accountPlan;
     }
 
+    public List<Transaction> getTransactions() {
+        return transactions;
+    }
+
     /**
      * Adds an account to the user's account list.
      *
@@ -130,8 +135,20 @@ public final class User {
         }
     }
 
-    public List<Transaction> getTransactions() {
-        return transactions;
+    /**
+     * Adds a transaction to the user's transaction list, maintaining the list sorted by timestamp.
+     *
+     * @param transaction the transaction to add
+     */
+    public void addTransactionByTimestamp(final Transaction transaction) {
+        if (transaction == null) {
+            return;
+        }
+        int index = 0;
+        while (index < transactions.size() && transactions.get(index).getTimestamp() <= transaction.getTimestamp()) {
+            index++;
+        }
+        transactions.add(index, transaction);
     }
 
     /**
@@ -155,6 +172,54 @@ public final class User {
         return age >= MIN_AGE;
     }
 
+    /**
+     * Adds a pending split payment to the user's list of pending transactions.
+     *
+     * @param splitPayment the split payment to add to the pending transactions
+     */
+    public void addPendingSplitPayment(final SplitPayment splitPayment) {
+        if (splitPayment != null) {
+            pendingTransactions.add(splitPayment);
+        }
+    }
+
+    /**
+     * Removes a pending split payment from the user's list of pending transactions.
+     *
+     * @param splitPayment the split payment to remove from the pending transactions
+     */
+    public void removePendingSplitPayment(final SplitPayment splitPayment) {
+        pendingTransactions.remove(splitPayment);
+    }
+
+    /**
+     * Retrieves the oldest pending split payment transaction based on the timestamp.
+     *
+     * @return the oldest SplitPayment transaction, or null if the list of pending transactions is empty
+     */
+    public SplitPayment getOldestPendingTransaction() {
+        return pendingTransactions.stream()
+                .min(Comparator.comparingInt(SplitPayment::getTimestamp))
+                .orElse(null); // Return null if no pending transactions exist
+    }
+
+    /**
+     * Retrieves the oldest unaccepted split payment transaction for the user.
+     */
+    public Map.Entry<SplitPayment, String> getOldestUnacceptedTransaction() {
+        for (SplitPayment payment : pendingTransactions) {
+            for (Account acc : accounts) {
+                String iban = acc.getIban();
+                if (payment.getIbanAcceptanceMap().containsKey(iban)
+                        && payment.getIbanAcceptanceMap().get(iban) == null) {
+                    // Found the first unaccepted transaction for the account
+                    return Map.entry(payment, iban); // return the found split transaction and iban to accept
+                }
+            }
+        }
+        return null;
+    }
+
     public void addTransactionToCommerciant(final Commerciant commerciant, final double amount,
                                             final String transactionCurrency,
                                             final String targetCurrency,
@@ -167,10 +232,6 @@ public final class User {
 
         // Actualizăm informațiile comerciantului în map
         cashbackInfo.put(commerciant, info); // Adăugăm comerciantul ca și cheie
-
-//        // Debugging pentru verificare
-//        System.out.println("Tranzacție adăugată pentru comerciantul: " + commerciant.getName());
-//        System.out.println("Total cheltuit pentru acest comerciant: " + info.totalSpent + " " + targetCurrency);
     }
 
     public double applyCashbackForTransaction(final Commerciant commerciant, final double amount,
@@ -224,28 +285,18 @@ public final class User {
         String strategy = commerciant.getCashbackStrategy();
         String category = commerciant.getType(); // Food, Clothes, Tech
 
-        // System.out.println("acccount currrency" + accountCurrency);
-
         // Verificăm dacă comerciantul are strategia 'spendingThreshold'
         if ("spendingThreshold".equals(strategy)) {
             // Calculăm totalul cheltuit până acum pentru comercianții cu strategia spendingThreshold
             double totalSpentForThreshold = calculateTotalSpentForSpendingThreshold();
 
-            // Conversie praguri în moneda contului
-            double threshold100 = 100.0;
-            double threshold300 = 300.0;
-            double threshold500 = 500.0;
+            // Conversie prag în moneda contului
+            double threshold100 = THRESHOLD_100;
 
             if (!accountCurrency.equals("RON")) { // Conversie din RON în moneda contului
                 double exchangeRate = ExchangeRate.getExchangeRate("RON", accountCurrency, exchangeRates); // Invers!
                 threshold100 = Math.round((100.0 * exchangeRate) * 100.0) / 100.0;
-                threshold300 = Math.round((300.0 * exchangeRate) * 100.0) / 100.0;
-                threshold500 = Math.round((500.0 * exchangeRate) * 100.0) / 100.0;
             }
-
-
-            // System.out.println("(isapplyingcashback) Praguri adaptate în moneda contului:" + threshold100 + ", " + threshold300 + ", " + threshold500);
-            // System.out.println("Total cheltuit în moneda contului: " + totalSpentForThreshold);
 
             // Verificăm dacă totalul cheltuit atinge pragul minim de 100 în moneda contului
             if (totalSpentForThreshold >= threshold100) {
@@ -256,11 +307,13 @@ public final class User {
         // Verificăm dacă comerciantul are strategia 'nrOfTransactions'
         if ("nrOfTransactions".equals(strategy)) {
             // Verificăm categoriile de comerciant pentru nrOfTransactions (Food, Clothes, Tech)
-            if (category.equalsIgnoreCase("Food") || category.equalsIgnoreCase("Clothes") || category.equalsIgnoreCase("Tech")) {
+            if (category.equalsIgnoreCase("Food")
+                    || category.equalsIgnoreCase("Clothes")
+                        || category.equalsIgnoreCase("Tech")) {
                 return "nrOfTransactions";  // Se poate aplica cashback
             }
         }
-
         return null;  // Nu se poate aplica cashback
     }
+
 }
