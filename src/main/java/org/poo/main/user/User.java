@@ -2,6 +2,7 @@ package org.poo.main.user;
 
 import org.poo.main.CashbackInfo;
 import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.cards.Card;
 import org.poo.main.split.SplitPayment;
 import org.poo.main.accounts.Account;
 import org.poo.main.exchange_rate.ExchangeRate;
@@ -26,8 +27,9 @@ public final class User {
     private String accountPlan;
     private List<Account> accounts; // Accounts linked to the user
     private List<Transaction> transactions; // Transactions performed by the user
-    private final Map<Commerciant, CashbackInfo> cashbackInfo;
+//    private final Map<Commerciant, CashbackInfo> cashbackInfo;
     private final List<SplitPayment> pendingTransactions;
+//    private double totalSpendingThreshold; // Suma totală cheltuită pentru strategia spendingThreshold
 
     private static final int MIN_AGE = 21;
     private static final double THRESHOLD_100 = 100.0;
@@ -41,13 +43,14 @@ public final class User {
         this.occupation = occupation;
         this.accounts = new ArrayList<>();
         this.transactions = new ArrayList<>();
-        this.cashbackInfo = new HashMap<>();
         this.pendingTransactions = new ArrayList<>();
 
         if ("student".equals(occupation))
             this.accountPlan = "student";
         else
             this.accountPlan = "standard";
+
+//        this.totalSpendingThreshold = 0.0;
     }
 
     public String getFirstName() {
@@ -101,6 +104,18 @@ public final class User {
     public List<Transaction> getTransactions() {
         return transactions;
     }
+
+//    public double getTotalSpendingThreshold() {
+//        return totalSpendingThreshold;
+//    }
+//
+//    public void setTotalSpendingThreshold(final double amount) {
+//        totalSpendingThreshold = amount;
+//    }
+//
+//    public void addToTotalSpendingThreshold(final double amount) {
+//        this.totalSpendingThreshold += amount;
+//    }
 
     /**
      * Adds an account to the user's account list.
@@ -220,100 +235,14 @@ public final class User {
         return null;
     }
 
-    public void addTransactionToCommerciant(final Commerciant commerciant, final double amount,
-                                            final String transactionCurrency,
-                                            final String targetCurrency,
-                                            final List<ExchangeRate> exchangeRates) {
-        // Obținem informațiile despre cashback pentru comerciant
-        CashbackInfo info = cashbackInfo.getOrDefault(commerciant, new CashbackInfo());
-
-        // Folosim metoda addTransaction pentru a adăuga suma în moneda țintă
-        info.addTransaction(amount, transactionCurrency, targetCurrency, exchangeRates);
-
-        // Actualizăm informațiile comerciantului în map
-        cashbackInfo.put(commerciant, info); // Adăugăm comerciantul ca și cheie
+    public List<Card> getAllCards() {
+        List<Card> allCards = new ArrayList<>();
+        for (Account account : accounts) {
+            // presupunem că există account.getCards()
+            allCards.addAll(account.getCards());
+        }
+        return allCards;
     }
 
-    public double applyCashbackForTransaction(final Commerciant commerciant, final double amount,
-                                              final String cashbackType, final String currency,
-                                              final List<ExchangeRate> exchangeRates) {
-        CashbackInfo info = cashbackInfo.getOrDefault(commerciant, new CashbackInfo());
-        double cashback = 0.0;
-
-        // Verificăm tipul de cashback și aplicăm corespunzător
-        if ("nrOfTransactions".equals(cashbackType)) {
-            // Aplicăm cashback pentru nrOfTransactions
-            cashback = info.calculateTransactionCashback(amount, commerciant); // Calculăm cashback-ul din nrOfTransactions
-            System.out.println("Cashback aplicat pentru nrOfTransactions: " + cashback);
-        } else if ("spendingThreshold".equals(cashbackType)) {
-            // Aplicăm cashback pentru spendingThreshold
-            cashback = info.calculateSpendingCashback(amount, this.accountPlan, currency, exchangeRates); // Calculăm cashback-ul din spendingThreshold
-            System.out.println("Cashback aplicat pentru spendingThreshold: " + cashback);
-        } else {
-            System.out.println("Tipul de cashback nu este valid.");
-        }
-
-        // Afișăm suma de plată după aplicarea cashback-ului
-        System.out.println("Cashback total calculat: " + cashback);
-
-        return cashback;  // Returnăm doar cashback-ul calculat, fără a modifica suma de plată
-    }
-
-
-    public double calculateTotalSpentForSpendingThreshold() {
-        double totalSpentForThreshold = 0.0;
-
-        // Iterăm prin toate intrările din cashbackInfo
-        for (Map.Entry<Commerciant, CashbackInfo> entry : cashbackInfo.entrySet()) {
-            // Verificăm doar comercianții care au strategia spendingThreshold
-            Commerciant currentCommerciant = entry.getKey();
-            CashbackInfo entryInfo = entry.getValue();
-
-            if ("spendingThreshold".equalsIgnoreCase(currentCommerciant.getCashbackStrategy())) {
-                totalSpentForThreshold += entryInfo.totalSpent;
-            }
-
-            System.out.println("Total cheltuit până acum: " + totalSpentForThreshold);
-        }
-
-        return totalSpentForThreshold;
-    }
-
-    public String isApplyingCashback(final Commerciant commerciant, final String accountCurrency,
-                                                        final List<ExchangeRate> exchangeRates) {
-        // Obținem strategia de cashback a comerciantului
-        String strategy = commerciant.getCashbackStrategy();
-        String category = commerciant.getType(); // Food, Clothes, Tech
-
-        // Verificăm dacă comerciantul are strategia 'spendingThreshold'
-        if ("spendingThreshold".equals(strategy)) {
-            // Calculăm totalul cheltuit până acum pentru comercianții cu strategia spendingThreshold
-            double totalSpentForThreshold = calculateTotalSpentForSpendingThreshold();
-
-            // Conversie prag în moneda contului
-            double threshold100 = THRESHOLD_100;
-
-            if (!accountCurrency.equals("RON")) { // Conversie din RON în moneda contului
-                double exchangeRate = ExchangeRate.getExchangeRate("RON", accountCurrency, exchangeRates); // Invers!
-                threshold100 = Math.round((100.0 * exchangeRate) * 100.0) / 100.0;
-            }
-
-            // Verificăm dacă totalul cheltuit atinge pragul minim de 100 în moneda contului
-            if (totalSpentForThreshold >= threshold100) {
-                return "spendingThreshold";  // Se poate aplica cashback
-            }
-        }
-
-        // Verificăm dacă comerciantul are strategia 'nrOfTransactions'
-        if ("nrOfTransactions".equals(strategy)) {
-            // Verificăm categoriile de comerciant pentru nrOfTransactions (Food, Clothes, Tech)
-            if (category.equalsIgnoreCase("Food")
-                    || category.equalsIgnoreCase("Clothes")
-                        || category.equalsIgnoreCase("Tech")) {
-                return "nrOfTransactions";  // Se poate aplica cashback
-            }
-        }
-        return null;  // Nu se poate aplica cashback
-    }
 
 }

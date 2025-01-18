@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.HashMap;
 import org.poo.fileio.CommandInput;
 import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.TransactionDetail;
 import org.poo.main.cards.Card;
 import org.poo.main.split.SplitPayment;
 import org.poo.main.accounts.Account;
@@ -96,27 +97,23 @@ public final class Tools {
         return cardsArray;
     }
 
-    /**
-     * Converts a list of accounts into a JSON array.
-     *
-     * @param accounts the list of accounts
-     * @return a JSON array representing the accounts
-     */
-    public static ArrayNode printAccountsForUser(final List<Account> accounts) {
+    public static ArrayNode printAccountsForUser(final List<Account> accounts, final String ownerEmail) {
         ArrayNode accountsArray = ObjectMapper.createArrayNode();
 
         for (Account account : accounts) {
-            ObjectNode accountNode = ObjectMapper.createObjectNode();
-            accountNode.put("IBAN", account.getIban());
-             accountNode.put("balance", account.getBalance());
+            // Only include the account if the ownerEmail matches the user's email
+            if (account.getOwnerEmail().equals(ownerEmail)) {
+                ObjectNode accountNode = ObjectMapper.createObjectNode();
+                accountNode.put("IBAN", account.getIban());
+                accountNode.put("balance", account.getBalance());
+                accountNode.put("currency", account.getCurrency());
+                accountNode.put("type", account.getAccountType());
 
-            accountNode.put("currency", account.getCurrency());
-            accountNode.put("type", account.getAccountType());
+                ArrayNode cardsArray = printCardsForAccount(account.getCards());
+                accountNode.set("cards", cardsArray);
 
-            ArrayNode cardsArray = printCardsForAccount(account.getCards());
-            accountNode.set("cards", cardsArray);
-
-            accountsArray.add(accountNode);
+                accountsArray.add(accountNode);
+            }
         }
 
         return accountsArray;
@@ -134,11 +131,13 @@ public final class Tools {
         userNode.put("lastName", user.getLastName());
         userNode.put("email", user.getEmail());
 
-        ArrayNode accountsArray = printAccountsForUser(user.getAccounts());
+        // Pass the user's email to filter out only the accounts they own
+        ArrayNode accountsArray = printAccountsForUser(user.getAccounts(), user.getEmail());
         userNode.set("accounts", accountsArray);
 
         return userNode;
     }
+
 
     /**
      * Retrieves the exchange rate between two currencies.
@@ -262,6 +261,21 @@ public final class Tools {
                 }
                 if (transaction.getCurrency() != null) {
                     transactionNode.put("currency", transaction.getCurrency());
+                }
+            }
+
+            else if ("Savings withdrawal".equals(transaction.getDescription())) {
+                // Format fields exactly as requested:
+                if (transaction.getAmount() != null) {
+                    transactionNode.put("amount", transaction.getAmount());
+                }
+                // The classic account IBAN is the "receiverIBAN"
+                if (transaction.getReceiverIBAN() != null) {
+                    transactionNode.put("classicAccountIBAN", transaction.getReceiverIBAN());
+                }
+                // The savings account IBAN is the "senderIBAN"
+                if (transaction.getSenderIBAN() != null) {
+                    transactionNode.put("savingsAccountIBAN", transaction.getSenderIBAN());
                 }
             }
 
@@ -652,6 +666,156 @@ public final class Tools {
                 user.removePendingSplitPayment(splitPayment);
             }
         }
+    }
+
+    /**
+     * Adds a card to all account instances with the same IBAN in all users' account lists.
+     *
+     * @param card   the card to add
+     * @param iban   the IBAN of the account
+     * @param users  the list of all users in the system
+     */
+    public static void addCardToAllInstances(Card card, String iban, List<User> users) {
+        for (User user : users) {
+            for (Account account : user.getAccounts()) {
+                if (account.getIban().equals(iban)) {
+                    // Verificăm dacă cardul nu există deja
+                    if (!account.getCards().contains(card)) {
+                        account.addCard(card); // Adaugă cardul în contul cu IBAN-ul respectiv
+                    }
+                }
+            }
+        }
+    }
+
+    public static double calculateSpentBetween(
+            Map<String, List<TransactionDetail>> associateTransactions,
+            String email,
+            int startTimestamp,
+            int endTimestamp) {
+        List<TransactionDetail> transactions = associateTransactions.getOrDefault(email, new ArrayList<>());
+        return transactions.stream()
+                .filter(t -> t.getType().equals("spend") &&
+                        t.getTimestamp() >= startTimestamp &&
+                        t.getTimestamp() <= endTimestamp)
+                .mapToDouble(TransactionDetail::getAmount)
+                .sum();
+    }
+
+    public static double calculateDepositedBetween(
+            Map<String, List<TransactionDetail>> associateTransactions,
+            String email,
+            int startTimestamp,
+            int endTimestamp) {
+        List<TransactionDetail> transactions = associateTransactions.getOrDefault(email, new ArrayList<>());
+        return transactions.stream()
+                .filter(t -> t.getType().equals("deposit") &&
+                        t.getTimestamp() >= startTimestamp &&
+                        t.getTimestamp() <= endTimestamp)
+                .mapToDouble(TransactionDetail::getAmount)
+                .sum();
+    }
+
+    public static String extractUsernameFromEmail(String email) {
+        // Split the email at '@' and then at '_'
+        String[] parts = email.split("@")[0].split("_");
+        if (parts.length >= 2) {
+            // Extract last names (all parts except the first)
+            StringBuilder lastNames = new StringBuilder();
+            for (int i = 1; i < parts.length; i++) {
+                if (i > 1) {
+                    lastNames.append(" ");
+                }
+                lastNames.append(capitalizeWithHyphen(parts[i]));
+            }
+
+            // Extract first name (the first part)
+            String firstName = capitalizeWithHyphen(parts[0]);
+
+            // Combine last names and first name
+            return lastNames.toString() + " " + firstName;
+        }
+
+        // If there's only one part, just capitalize it
+        return capitalizeWithHyphen(parts[0]);
+    }
+
+    /**
+     * Capitalizes each word, including those separated by hyphens.
+     * Preserves the original case if the part is entirely uppercase.
+     *
+     * @param str the input string
+     * @return the capitalized string
+     */
+    private static String capitalizeWithHyphen(String str) {
+        String[] hyphenParts = str.split("-");
+        for (int i = 0; i < hyphenParts.length; i++) {
+            if (hyphenParts[i].isEmpty()) {
+                continue; // Skip empty parts
+            }
+            if (isAllUpperCase(hyphenParts[i])) {
+                // Preserve uppercase if the part is entirely uppercase
+                hyphenParts[i] = hyphenParts[i];
+            } else {
+                // Capitalize the first letter and lowercase the rest
+                hyphenParts[i] = hyphenParts[i].substring(0, 1).toUpperCase() +
+                        hyphenParts[i].substring(1).toLowerCase();
+            }
+        }
+        return String.join("-", hyphenParts);
+    }
+
+    /**
+     * Checks if the entire string is in uppercase.
+     *
+     * @param str the input string
+     * @return true if all characters are uppercase, false otherwise
+     */
+    private static boolean isAllUpperCase(String str) {
+        for (char c : str.toCharArray()) {
+            if (Character.isLetter(c) && !Character.isUpperCase(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isCommerciantIban(final String iban, final List<Commerciant> commerciants) {
+        // method to verify in the list of commerciants if the given iban is of one commerciant
+        for (Commerciant commerciant : commerciants) {
+            if (commerciant.getAccount().equals(iban)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Finds an account by its alias from the list of users.
+     *
+     * @param alias the alias to search for
+     * @param users the list of users to search within
+     * @return the Account object with the matching alias, or null if not found
+     */
+    public static Account findAccountByAlias(String alias, List<User> users) {
+        if (alias == null || alias.isEmpty() || users == null) {
+            return null;
+        }
+
+        for (User user : users) {
+            List<Account> accounts = user.getAccounts(); // Get the accounts of the user
+            if (accounts == null) {
+                continue;
+            }
+
+            for (Account account : accounts) {
+                if (alias.equalsIgnoreCase(account.getAlias())) {
+                    return account; // Return the account if alias matches
+                }
+            }
+        }
+
+        return null; // Return null if no matching account is found
     }
 
 

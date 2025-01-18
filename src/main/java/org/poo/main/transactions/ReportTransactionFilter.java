@@ -15,6 +15,11 @@ public class ReportTransactionFilter implements TransactionFilter {
      */
     @Override
     public boolean filter(final Transaction transaction, final String iban) {
+
+        if (transaction.getDescription() != null) {
+            return true;
+        }
+
         if (transaction.getAccountIBAN() == null) {
             return (transaction.getSenderIBAN() != null
                     && transaction.getSenderIBAN().equals(iban))

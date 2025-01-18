@@ -1,7 +1,9 @@
 package org.poo.main;
 
 import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.accounts.Account;
 import org.poo.main.exchange_rate.ExchangeRate;
+import org.poo.main.user.User;
 
 import java.util.List;
 
@@ -26,12 +28,18 @@ public class CashbackInfo {
         // Incrementing the nr of transactions and total amount spent
         this.transactionCount++;
         this.totalSpent += amount;
+        System.out.println("new total spent for cashbak info:" + this.totalSpent);
+    }
+
+    public void modifyCashbackInfo(double amount) {
+        this.transactionCount ++;
+        this.totalSpent += amount;
     }
 
     public double calculateTransactionCashback(final double amount, final Commerciant commerciant) {
         // Definim ratele de cashback pentru fiecare tip de comerciant
         double cashbackAmount = 0.0;
-        double cashbackRate = 0.0;
+        /*double cashbackRate = 0.0;
 
         // Verificăm tipul comerciantului (Food, Clothes, Tech) pentru a aplica cashback-ul corect
         String category = commerciant.getType();
@@ -66,18 +74,89 @@ public class CashbackInfo {
             return 0.0;  // Nicio sumă de cashback nu va fi aplicată
         }
 
-        // System.out.println("Transaction-based cashback calculated: " + cashbackAmount);
+        // System.out.println("Transaction-based cashback calculated: " + cashbackAmount);*/
 
         return cashbackAmount;
     }
 
+//    public double calculateSpendingCashback(final double amount, final String userPlan,
+//                                            final String currency, final String paymentCurrency,
+//                                            final List<ExchangeRate> exchangeRates) {
+//        // Obținem totalSpent în moneda contului
+//        double totalSpentInCurrency = this.totalSpent;
+//
+//        // Definim ratele de cashback în funcție de planul utilizatorului
+//        double cashbackRate100 = 0.0, cashbackRate300 = 0.0, cashbackRate500 = 0.0;
+//
+//        if ("standard".equals(userPlan) || "student".equals(userPlan)) {
+//            cashbackRate100 = 0.001;  // 0.1%
+//            cashbackRate300 = 0.002;  // 0.2%
+//            cashbackRate500 = 0.0025; // 0.25%
+//        } else if ("silver".equals(userPlan)) {
+//            cashbackRate100 = 0.003;  // 0.3%
+//            cashbackRate300 = 0.004;  // 0.4%
+//            cashbackRate500 = 0.005;  // 0.5%
+//        } else if ("gold".equals(userPlan)) {
+//            cashbackRate100 = 0.005;  // 0.5%
+//            cashbackRate300 = 0.0055; // 0.55%
+//            cashbackRate500 = 0.007;  // 0.7%
+//        }
+//
+//        // Transformăm pragurile în moneda contului
+//        double threshold100 = 100.0;
+//        double threshold300 = 300.0;
+//        double threshold500 = 500.0;
+//
+//        if (!currency.equals("RON")) { // Dacă moneda contului nu este RON
+//            double exchangeRate = ExchangeRate.getExchangeRate("RON", currency, exchangeRates);
+//            threshold100 = Math.round((100.0 * exchangeRate) * 100.0) / 100.0;
+//            threshold300 = Math.round((300.0 * exchangeRate) * 100.0) / 100.0;
+//            threshold500 = Math.round((500.0 * exchangeRate) * 100.0) / 100.0;
+//        }
+//
+//        // System.out.println("Praguri în moneda contului (" + currency + "): " + threshold100 + ", " + threshold300 + ", " + threshold500);
+//
+//        // Verificăm pragurile pentru cashback
+//        double cashbackRate = 0.0;
+//        if (totalSpentInCurrency >= threshold500) {
+//            cashbackRate = cashbackRate500;
+//            this.cashbackApplied++;
+//        } else if (totalSpentInCurrency >= threshold300) {
+//            cashbackRate = cashbackRate300;
+//            this.cashbackApplied++;
+//        } else if (totalSpentInCurrency >= threshold100) {
+//            cashbackRate = cashbackRate100;
+//            this.cashbackApplied++;
+//        }
+//
+//        System.out.println("cashbacke rate applied : " + cashbackRate);
+//
+//        double newAmount = amount;
+//
+//        System.out.println("amount de platiiiit la cashback: ");
+//        if (!currency.equals(paymentCurrency)) {
+//            double exchangeRate = ExchangeRate.getExchangeRate(paymentCurrency, currency, exchangeRates);
+//            newAmount = Math.round((amount * exchangeRate) * 100.0) / 100.0;
+//        }
+//
+//        // Calculăm cashback-ul pe baza valorii tranzacției curente
+//        double cashbackAmount = newAmount * cashbackRate;
+//
+//        return cashbackAmount;
+//    }
+
     public double calculateSpendingCashback(final double amount, final String userPlan,
-                                            final String currency, final List<ExchangeRate> exchangeRates) {
+                                            final String currency, final String paymentCurrency,
+                                            final List<ExchangeRate> exchangeRates, final Account account) {
         // Obținem totalSpent în moneda contului
-        double totalSpentInCurrency = this.totalSpent;
+        //double totalSpentInCurrency = this.totalSpent;
+        double totalSpentInCurrency = account.getTotalSpendingThreshold();
+        System.out.println("Total in metod calcul: " + totalSpentInCurrency);
 
         // Definim ratele de cashback în funcție de planul utilizatorului
         double cashbackRate100 = 0.0, cashbackRate300 = 0.0, cashbackRate500 = 0.0;
+
+        System.out.println("userplan" + userPlan);
 
         if ("standard".equals(userPlan) || "student".equals(userPlan)) {
             cashbackRate100 = 0.001;  // 0.1%
@@ -105,7 +184,7 @@ public class CashbackInfo {
             threshold500 = Math.round((500.0 * exchangeRate) * 100.0) / 100.0;
         }
 
-        // System.out.println("Praguri în moneda contului (" + currency + "): " + threshold100 + ", " + threshold300 + ", " + threshold500);
+        System.out.println("Praguri în moneda contului (" + currency + "): " + threshold100 + ", " + threshold300 + ", " + threshold500);
 
         // Verificăm pragurile pentru cashback
         double cashbackRate = 0.0;
@@ -115,19 +194,26 @@ public class CashbackInfo {
         } else if (totalSpentInCurrency >= threshold300) {
             cashbackRate = cashbackRate300;
             this.cashbackApplied++;
+            System.out.println("rates " + cashbackRate + " " + cashbackRate300);
         } else if (totalSpentInCurrency >= threshold100) {
             cashbackRate = cashbackRate100;
             this.cashbackApplied++;
         }
 
+        System.out.println("cashbacke rate applied : " + cashbackRate);
+
         double newAmount = amount;
-        double exchangeRate = ExchangeRate.getExchangeRate("RON", currency, exchangeRates);
-        newAmount = Math.round((amount * exchangeRate) * 100.0) / 100.0;
+
+        if (!currency.equals(paymentCurrency)) {
+            double exchangeRate = ExchangeRate.getExchangeRate(paymentCurrency, currency, exchangeRates);
+            newAmount = Math.round((amount * exchangeRate) * 100.0) / 100.0;
+        }
 
         // Calculăm cashback-ul pe baza valorii tranzacției curente
         double cashbackAmount = newAmount * cashbackRate;
 
         return cashbackAmount;
     }
+
 
 }

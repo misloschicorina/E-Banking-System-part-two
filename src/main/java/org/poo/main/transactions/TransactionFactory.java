@@ -367,6 +367,69 @@ public final class TransactionFactory {
         );
     }
 
+    public static Transaction createSplitRejectTransaction(
+            final double totalAmount, final int timestamp,
+            final List<Double> amountsForUsers, final String currency,
+            final List<String> accounts,
+            final String splitPaymentType) {
+
+        String description = "Split payment of "
+                + String.format("%.2f", totalAmount) + " " + currency;
+        String errorMessage = "One user rejected the payment.";
+
+        return new Transaction(
+                timestamp,
+                description,
+                null, null, totalAmount, currency,
+                null, null, null, null,
+                null, null, accounts, errorMessage,
+                null,                         // Valoare pentru `plan`
+                splitPaymentType,             // Tipul split payment-ului
+                amountsForUsers               // Lista sumelor pentru utilizatori
+        );
+    }
+
+    /**
+     * Creates a transaction for transferring money from a savings account to a classic account.
+     *
+     * @param timestamp           The timestamp of the transaction.
+     * @param amount              The amount of money transferred.
+     * @param savingsAccountIBAN  The IBAN of the savings account (sender).
+     * @param classicAccountIBAN  The IBAN of the classic account (receiver).
+     * @return The created transaction for a "Savings withdrawal".
+     */
+    public static Transaction createSavingsWithdrawalTransaction(
+            final int timestamp,
+            final double amount,
+            final String savingsAccountIBAN,
+            final String classicAccountIBAN) {
+
+        return new Transaction(
+                timestamp,
+                "Savings withdrawal",     // description
+                savingsAccountIBAN,      // senderIBAN
+                classicAccountIBAN,      // receiverIBAN
+                amount,                  // amount
+                null,                    // currency (null if none provided)
+                null,            // transferType (arbitrary, e.g., "withdrawal")
+                null,                    // cardNumber
+                null,                    // cardHolder
+                null,                    // accountIBAN
+                null,                    // commerciant
+                null,                    // exchangeRate
+                null,                    // error
+                null,
+                null,                    // plan
+                null,                    // splitPaymentType
+                null                     // amountForUsers
+        );
+    }
+
+
+
+
+
+
 
 
 

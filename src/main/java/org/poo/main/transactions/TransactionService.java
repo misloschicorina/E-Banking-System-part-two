@@ -108,6 +108,19 @@ public class TransactionService {
         senderUser.addTransaction(sentTransaction);
     }
 
+    public void addSendMoneyToCommerciantTransaction(final int timestamp, final Account sender,
+                                                     final String receiverCommerciantIban, final double amount,
+                                                     final String currency, final String description) {
+        User senderUser = Tools.findUserByEmail(sender.getOwnerEmail(), users);
+        Transaction sentTransaction =
+                TransactionFactory.createSentMoneyTransaction(timestamp, sender.getIban(),
+                        receiverCommerciantIban, amount, currency);
+        sentTransaction.setDescription(description);
+
+        senderUser.addTransaction(sentTransaction);
+
+    }
+
     /**
      * Creates and adds a received money transaction to the receiver's transaction list.
      *
@@ -304,6 +317,49 @@ public class TransactionService {
         Transaction interestTransaction =
                 TransactionFactory.createInterestTransaction(timestamp, amount, currency);
         user.addTransaction(interestTransaction);
+    }
+
+    public void addSplitRejectTransaction(final int timestamp, final double totalAmount,
+                                         final List<Double> amountsForUsers, final String currency,
+                                         final List<String> accounts,
+                                         final String splitPaymentType, final User user) {
+        Transaction splitTransaction = TransactionFactory.createSplitRejectTransaction(
+                totalAmount,              // Totalul
+                timestamp,                // Timestamp-ul tranzacției
+                amountsForUsers,          // Lista sumelor alocate fiecărui cont
+                currency,                 // Moneda
+                accounts,                 // Conturile implicate
+                splitPaymentType          // Tipul split payment-ului
+        );
+
+        // Adăugăm tranzacția în lista utilizatorului, menținând ordinea după timestamp
+        user.addTransactionByTimestamp(splitTransaction);
+    }
+
+    /**
+     * Creates and adds a savings withdrawal transaction to the user's transaction list.
+     *
+     * @param timestamp          the timestamp of the transaction
+     * @param amount             the amount being withdrawn
+     * @param savingsAccountIBAN the IBAN of the savings account (sender)
+     * @param classicAccountIBAN the IBAN of the classic account (receiver)
+     * @param user               the user performing the withdrawal
+     */
+    public void addSavingsWithdrawalTransaction(final int timestamp,
+                                                final double amount,
+                                                final String savingsAccountIBAN,
+                                                final String classicAccountIBAN,
+                                                final User user) {
+        // 1) Create the transaction via the TransactionFactory method
+        Transaction transaction = TransactionFactory.createSavingsWithdrawalTransaction(
+                timestamp,
+                amount,
+                savingsAccountIBAN,
+                classicAccountIBAN
+        );
+
+        // 2) Add it to the user's transaction list
+        user.addTransaction(transaction);
     }
 
 

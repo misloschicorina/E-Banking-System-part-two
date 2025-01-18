@@ -1,9 +1,13 @@
 package org.poo.main.bank;
 
+import org.poo.main.Command;
 import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.PrintUsersCommand;
+import org.poo.main.accounts.BusinessAccount;
 import org.poo.main.split.SplitPayment;
 import org.poo.main.cards.*;
 import org.poo.main.accounts.Account;
+import org.poo.main.accounts.AccountFactory;
 import org.poo.main.accounts.ClassicAccount;
 import org.poo.main.accounts.SavingsAccount;
 import org.poo.main.exchange_rate.ExchangeRate;
@@ -11,6 +15,7 @@ import org.poo.main.tools.Tools;
 import org.poo.main.transactions.*;
 import org.poo.main.user.User;
 import org.poo.utils.Utils;
+import org.poo.main.TransactionDetail;
 import org.poo.main.split.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,9 +23,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.poo.fileio.CommandInput;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class BankSystem {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -28,6 +31,8 @@ public class BankSystem {
     private final List<ExchangeRate> exchangeRates = new ArrayList<>();
     private final List<Commerciant> commerciants = new ArrayList<>();
     private final TransactionService transactionService;
+
+    private final Command printUsersCommand;
 
     public void addUser(final User user) {
         users.add(user);
@@ -43,12 +48,13 @@ public class BankSystem {
 
     public BankSystem() {
         this.transactionService = new TransactionService(users);
+        this.printUsersCommand = new PrintUsersCommand(objectMapper, users);
     }
 
     public void processCommands(final CommandInput[] commands, final ArrayNode output) {
         for (CommandInput command : commands) {
             switch (command.getCommand()) {
-                case "printUsers" -> printUsers(command, output);
+                case "printUsers" -> printUsersCommand.execute(command, output);
                 case "addAccount" -> addAccount(command);
                 case "createCard" -> createCard(command);
                 case "createOneTimeCard" -> createOneTimeCard(command);
@@ -62,15 +68,19 @@ public class BankSystem {
                 case "setMinimumBalance" -> setMinimumBalance(command);
                 case "checkCardStatus" -> checkCardStatus(command, output);
                 case "splitPayment" -> splitPayment(command);
-                case "acceptSplitPayment" -> acceptSplitPayment(command);
-                case "rejectSplitPayment" -> rejectSplitPayment(command);
+                case "acceptSplitPayment" -> acceptSplitPayment(command, output);
+                case "rejectSplitPayment" -> rejectSplitPayment(command, output);
                 case "report" -> report(command, output);
                 case "spendingsReport" -> spendingsReport(command, output);
                 case "addInterest" -> addInterest(command, output);
                 case "changeInterestRate" -> changeInterestRate(command, output);
                 case "withdrawSavings" -> withdrawSavings(command, output);
-                case "upgradePlan" -> upgradePlan(command);
+                case "upgradePlan" -> upgradePlan(command, output);
                 case "cashWithdrawal" -> cashWithdrawal(command, output);
+                case "addNewBusinessAssociate" -> addNewBusinessAssociate(command);
+                case "changeSpendingLimit" -> changeSpendingLimit(command, output);
+                case "changeDepositLimit" -> changeDepositLimit(command, output);
+                case "businessReport" -> businessReport(command, output);
                 default -> {
                 }
             }
@@ -109,19 +119,52 @@ public class BankSystem {
         int timestamp = command.getTimestamp();
         String accountType = command.getAccountType();
         String currency = command.getCurrency();
+        String iban = Utils.generateIBAN();
 
         Account account = null;
 
-        String iban = Utils.generateIBAN();
+        try {
+            switch (accountType) {
+                case "classic":
+                    account = AccountFactory.createAccount(
+                            AccountFactory.AccountType.CLASSIC,
+                            currency,
+                            command.getEmail(),
+                            iban,
+                            null);
+                    break;
 
-        // Create the account based on the account type
-        if ("classic".equals(accountType)) {
-            account = new ClassicAccount(currency, command.getEmail(), iban);
-        } else if ("savings".equals(accountType)) {
-            double interestRate = command.getInterestRate();
-            account = new SavingsAccount(currency, command.getEmail(), interestRate, iban);
-        } else if ("business".equals(accountType)) {
-            System.out.println("Business accounts not implemented yet.");
+                case "savings":
+                    double interestRate = command.getInterestRate();
+                    account = AccountFactory.createAccount(
+                            AccountFactory.AccountType.SAVINGS,
+                            currency,
+                            command.getEmail(),
+                            iban,
+                            interestRate);
+                    break;
+
+                case "business":
+                    account = AccountFactory.createAccount(
+                            AccountFactory.AccountType.BUSINESS,
+                            currency,
+                            command.getEmail(),
+                            iban,
+                            null);
+
+                    double initialLimitInRON = account.getSpendingLimit();
+                    double exchangeRate = ExchangeRate.getExchangeRate("RON", currency, exchangeRates);
+                    double convertedLimit = initialLimitInRON * exchangeRate;
+
+                    account.setSpendingLimit(convertedLimit, command.getEmail());
+                    account.setDepositLimit(convertedLimit, command.getEmail());
+                    break;
+
+                default:
+                    throw new IllegalArgumentException("Unsupported account type: " + accountType);
+            }
+        } catch (IllegalArgumentException e) {
+            System.err.println("Failed to create account: " + e.getMessage());
             return;
         }
 
@@ -129,7 +172,9 @@ public class BankSystem {
         user.addAccount(account);
 
         // Add the transaction to the user's transaction list
-        transactionService.addAccountTransaction(timestamp, account, user);
+        if (account.isBusinessAccount() == false) {
+            transactionService.addAccountTransaction(timestamp, account, user);
+        }
     }
 
     private void createCard(final CommandInput command) {
@@ -142,15 +187,18 @@ public class BankSystem {
         Account account = Tools.findAccountByIBAN(command.getAccount(), users);
 
         if (account != null) {
+            String iban = account.getIban();
+
             // Generate a unique card number
             String cardNumber = org.poo.utils.Utils.generateCardNumber();
 
             // Use the factory to create a standard card
-            CardFactory cardFactory = new StandardCardFactory();
-            Card card = cardFactory.createCard(user, account, cardNumber);
+            Card card = CardFactory.createCard(CardFactory.CardType.STANDARD, user, account, cardNumber);
 
             // Add the card to the user's account
             account.addCard(card);
+
+            Tools.addCardToAllInstances(card, iban, users);
 
             // Add the transaction to the user's transaction list
             transactionService.addCardTransaction(command.getTimestamp(), card, account, user);
@@ -159,7 +207,6 @@ public class BankSystem {
 
     private void createOneTimeCard(final CommandInput command) {
         User user = Tools.findUserByEmail(command.getEmail(), users);
-        int timestamp = command.getTimestamp();
 
         if (user == null) {
             return;
@@ -168,27 +215,49 @@ public class BankSystem {
         Account account = Tools.findAccountByIBAN(command.getAccount(), users);
 
         if (account != null) {
+            String iban = account.getIban();
+
             // Generate a unique card number
             String cardNumber = org.poo.utils.Utils.generateCardNumber();
 
             // Use the factory to create a one-time card
-            CardFactory cardFactory = new OneTimeCardFactory();
-            Card oneTimeCard = cardFactory.createCard(user, account, cardNumber);
+            Card oneTimeCard = CardFactory.createCard(CardFactory.CardType.ONE_TIME, user, account, cardNumber);
 
             // Add the one-time card to the user's account
             account.addCard(oneTimeCard);
 
+            Tools.addCardToAllInstances(oneTimeCard, iban, users);
+
             // Add the transaction to the user's transaction list
-            transactionService.addCardTransaction(timestamp, oneTimeCard, account, user);
+            transactionService.addCardTransaction(command.getTimestamp(), oneTimeCard, account, user);
         }
     }
 
     private void addFunds(final CommandInput command) {
         Account account = Tools.findAccountByIBAN(command.getAccount(), users);
+        String email = command.getEmail();
 
-        if (account != null) {
-            account.deposit(command.getAmount());
+        double amount = command.getAmount();
+
+        if (account == null) {
+            return;
         }
+
+        if (account.isBusinessAccount()) {
+            if (!account.isAssociate(email)) {
+                return;
+            }
+
+            if (account.isEmployee(email)) {
+                if (amount > account.getDepositLimit()) {
+                    System.out.println("business errror: vrea sa depoziteze mai mult decat are voie " + amount);
+                    return;
+                }
+            }
+        }
+
+        account.deposit(amount);
+        account.addDeposit(email, amount, command.getTimestamp());
     }
 
     private void deleteAccount(final CommandInput command, final ArrayNode output) {
@@ -203,6 +272,12 @@ public class BankSystem {
         Account foundAccount = Tools.findAccountByIBAN(iban, users);
 
         if (foundAccount == null) {
+            return;
+        }
+
+        // only owner can delete the account
+        if (!foundAccount.getOwnerEmail().equals(user.getEmail())) {
+            System.out.println("You are not authorized to make this transaction.");
             return;
         }
 
@@ -260,19 +335,29 @@ public class BankSystem {
     private void deleteCard(final CommandInput command) {
         String cardNumber = command.getCardNumber();
         int timestamp = command.getTimestamp();
+        String email = command.getEmail();
 
         // Iterate through all users to find the card to delete
         for (User user : users) {
             for (Account account : user.getAccounts()) {
                 for (Card card : account.getCards()) {
                     if (card.getCardNumber().equals(cardNumber)) {
-                        // Add the transaction to the user's transaction list
-                        transactionService.addDeletedCardTransaction(timestamp, account,
-                                card, user);
-                        // Remove the card from the account
-                        account.removeCard(card);
-                        return;
+                        User cardOwner = card.getCardOwner();
+                        // daca cel ce vrea sa stearga cardul e angajat, poate sterge doar cardurile facute de el
+                        if (account.isEmployee(email)) {
+                            if (!email.equals(cardOwner.getEmail())) {
+                                System.out.println("You are not authorized to delete this card.");
+                                return;
+                            }
+                        }
                     }
+
+                    // Add the transaction to the user's transaction list
+                    transactionService.addDeletedCardTransaction(timestamp, account,
+                            card, user);
+                    // Remove the card from the account
+                    account.removeCard(card);
+                    return;
                 }
             }
         }
@@ -331,28 +416,13 @@ public class BankSystem {
         }
 
         // Perform the payment if the card is valid and not frozen
-        performPayment(user, card, account, amount, currency, commerciantName, timestamp, output);
-
-        String accountCurrency = account.getCurrency(); // Moneda contului
-
-        if (user.isApplyingCashback(commerciant, accountCurrency, exchangeRates) != null) {
-
-            // Calculăm cashback-ul în moneda contului
-            double cashback = user.applyCashbackForTransaction(commerciant, amount,
-                    user.isApplyingCashback(commerciant, accountCurrency, exchangeRates),
-                    accountCurrency, exchangeRates);
-
-            account.deposit(cashback);  // Depunem cashback-ul în cont
-            System.out.println("Cashback aplicat: " + cashback + " " + accountCurrency);
-        }
-
-
+        performPayment(user, card, account, amount, currency, commerciant, timestamp, output, email, command.getCurrency());
     }
 
     private void performPayment(final User user, final Card card, final Account account,
                                 final double amount, final String currency,
-                                final String commerciant, final int timestamp,
-                                final ArrayNode output) {
+                                final Commerciant commerciant, final int timestamp,
+                                final ArrayNode output, String email, String commandCurrency) {
         // Convert the amount to the correct currency if necessary
         double finalAmount = Tools.calculateFinalAmount(account, amount, exchangeRates, currency);
 
@@ -369,19 +439,47 @@ public class BankSystem {
                 return;
             }
 
+            if (account.isBusinessAccount()) {
+                if (account.isEmployee(email)) {
+                    if (amount > account.getSpendingLimit()) {
+                        System.out.println("esti doar angajat nu poti plati " + amount + "  .Limita pt tine de de " + account.getSpendingLimit());
+                        return;
+                    }
+                }
+            }
+
             account.spend(finalAmount);
+            if (commerciant.getCashbackStrategy().equals("spendingThreshold")) {
+                account.addToTotalSpendingThreshold(finalAmount);
+            }
             double commission = calculateComision(user, finalAmount, currency, exchangeRates);
 
             // Substract the calculated commision from the account
             account.spend((commission));
 
-            Commerciant commerciantt = Tools.findCommerciantByName(commerciant, commerciants);
-            // Adaug tranzactia in mapul userului cu comercianti ca sa stiu nr de tranzactii si totalspend
-            user.addTransactionToCommerciant(commerciantt, amount, currency, account.getCurrency(), exchangeRates);
+//            // Adaug tranzactia in mapul userului cu comercianti ca sa stiu nr de tranzactii si totalspend
+//            user.addTransactionToCommerciant(commerciant, amount, currency, account.getCurrency(), exchangeRates);
 
             // Add the transaction to the user's transaction list
             transactionService.addOnlinePaymentTransaction(timestamp,
-                    card, finalAmount, commerciant, user, account.getIban());
+                    card, finalAmount, commerciant.getName(), user, account.getIban());
+
+            // strict pr raport la business account
+            account.addSpending(email, finalAmount, timestamp, commerciant.getName());
+            account.displayAssociateTransactions();
+
+            String accountCurrency = account.getCurrency(); // Moneda contului
+
+            if (account.isApplyingCashback(commerciant, accountCurrency, exchangeRates) != null) {
+
+                // Calculăm cashback-ul în moneda contului
+                double cashback = account.applyCashbackForTransaction(commerciant, amount,
+                        account.isApplyingCashback(commerciant, accountCurrency, exchangeRates),
+                        accountCurrency, commandCurrency, exchangeRates, user);
+
+                account.deposit(cashback);  // Depunem cashback-ul în cont
+            }
+
 
             if (card.isOneTimeCard()) {
                 handleOneTimeCard(user, card, account, timestamp);
@@ -392,6 +490,7 @@ public class BankSystem {
             transactionService.addInsufficientFundsTransaction(timestamp,
                     "Insufficient funds", user, account.getIban());
         }
+
     }
 
     private void handleOneTimeCard(final User user, final Card card,
@@ -446,20 +545,58 @@ public class BankSystem {
         String description = command.getDescription();
         int timestamp = command.getTimestamp();
 
+        boolean isMerchant = Tools.isCommerciantIban(receiverIBAN, commerciants);
+
         Account senderAccount = Tools.findAccountByIBAN(senderIBAN, users);
         Account receiverAccount = Tools.findAccountByIBAN(receiverIBAN, users);
 
-        // Check if both accounts exist
-        if (senderAccount == null || receiverAccount == null) {
-            sendMoneyError("User not found", timestamp, output);
-            return;
+        if (isMerchant == false) {
+            if (senderAccount == null) {
+                // try with alias
+                senderAccount = Tools.findAccountByAlias(senderIBAN, users);
+                if (senderAccount == null) {
+                    sendMoneyError("User not found", timestamp, output);
+                    return;
+                }
+            }
+            if (receiverAccount == null) {
+                // try with alias
+                receiverAccount = Tools.findAccountByAlias(receiverIBAN, users);
+                if (receiverAccount == null) {
+                    sendMoneyError("User not found", timestamp, output);
+                return;
+                }
+            }
         }
 
         // Get sender user details
-        User senderUser = Tools.findUserByAccount(senderIBAN, users);
+        User senderUser = Tools.findUserByEmail(command.getEmail(), users);
 
         // Calculate commission in sender's currency
         double commission = calculateComision(senderUser, amount, senderAccount.getCurrency(), exchangeRates);
+        if (isMerchant == true) {
+            Commerciant commerciant = Tools.findCommerciantByIBAN(receiverIBAN, commerciants);
+            senderAccount.spend(amount + commission); // Include commission
+            if (commerciant.getCashbackStrategy().equals("spendingThreshold")) {
+                senderAccount.addToTotalSpendingThreshold(amount);
+            }
+            if (senderAccount.isApplyingCashback(commerciant, senderAccount.getCurrency(), exchangeRates) != null) {
+
+                // Calculăm cashback-ul în moneda contului
+                double cashback = senderAccount.applyCashbackForTransaction(commerciant, amount,
+                        senderAccount.isApplyingCashback(commerciant, senderAccount.getCurrency(), exchangeRates),
+                        senderAccount.getCurrency(), senderAccount.getCurrency(), exchangeRates, senderUser);
+
+                senderAccount.deposit(cashback);  // Depunem cashback-ul în cont
+                // trebuie facuta si tranzactie si adaugata in lista userului
+                senderAccount.addSpending(senderUser.getEmail(), amount, timestamp, commerciant.getName());
+            }
+
+            transactionService.addSendMoneyToCommerciantTransaction(timestamp, senderAccount,
+                    commerciant.getAccount(), amount, senderAccount.getCurrency(), description);
+
+            return;
+        }
 
         // Total amount including commission
         double totalAmount = amount + commission;
@@ -478,6 +615,16 @@ public class BankSystem {
                 return;
             }
             finalAmount = amount * exchangeRate;
+        }
+
+        String senderEmail = senderUser.getEmail();
+
+        if (senderAccount.isBusinessAccount()) {
+            if (senderAccount.isEmployee(senderEmail)) {
+                if (totalAmount > senderAccount.getSpendingLimit()) {
+                    return;
+                }
+            }
         }
 
         // Check if the sender has enough funds for the transfer including commission
@@ -499,6 +646,8 @@ public class BankSystem {
         transactionService.addReceivedMoneyTransaction(timestamp, senderAccount,
                 receiverAccount, amount, exchangeRate, receiverAccount.getCurrency(), description);
 
+
+        senderAccount.addSpending(senderEmail, amount, timestamp, null);
     }
 
     private void sendMoneyError(final String description, final int timestamp, final ArrayNode output) {
@@ -563,9 +712,15 @@ public class BankSystem {
         String iban = command.getAccount();
         double limit = command.getAmount();
 
+        User user = Tools.findUserByAccount(iban, users);
+        if (user == null) {
+            return;
+        }
+
         Account account = Tools.findAccountByIBAN(iban, users);
 
-        if (account != null) {
+        // Only owner can adjust minimum balance
+        if (account != null && account.getOwnerEmail().equals(user.getEmail())) {
             account.setMinBalance(limit);
         }
     }
@@ -660,11 +815,23 @@ public class BankSystem {
         }
     }
 
-    private void acceptSplitPayment(final CommandInput command) {
+    private void acceptSplitPayment(final CommandInput command, final ArrayNode output) {
         String email = command.getEmail();
+        int timestamp = command.getTimestamp();
 
         User user = Tools.findUserByEmail(email, users);
         if (user == null) {
+            ObjectNode errorNode = output.addObject();
+
+            // Setează valorile pentru nodul de nivel superior
+            errorNode.put("command", "acceptSplitPayment");
+            errorNode.put("timestamp", timestamp);
+
+            // Creează un nod "output" în interiorul lui errorNode
+            ObjectNode innerOutput = errorNode.putObject("output");
+            innerOutput.put("description", "User not found");
+            innerOutput.put("timestamp", timestamp);
+
             return;
         }
 
@@ -745,21 +912,51 @@ public class BankSystem {
         Tools.removeSplitPaymentFromUsers(splitPayment, users);
     }
 
-    private void rejectSplitPayment(final CommandInput command) {
+    private void rejectSplitPayment(final CommandInput command, final ArrayNode output) {
         String email = command.getEmail();
+        int timestamp = command.getTimestamp();
 
         User user = Tools.findUserByEmail(email, users);
         if (user == null) {
+            ObjectNode errorNode = output.addObject();
+
+            // Setează valorile pentru nodul de nivel superior
+            errorNode.put("command", "rejectSplitPayment");
+            errorNode.put("timestamp", timestamp);
+
+            // Creează un nod "output" în interiorul lui errorNode
+            ObjectNode innerOutput = errorNode.putObject("output");
+            innerOutput.put("description", "User not found");
+            innerOutput.put("timestamp", timestamp);
+
             return;
         }
 
         // Retrieve the oldest pending split payment
         SplitPayment splitPayment = user.getOldestPendingTransaction();
 
-        if (splitPayment != null) {
-            // Remove the split payment from all involved users
-            Tools.removeSplitPaymentFromUsers(splitPayment, users);
+        if (splitPayment == null) {
+            return;
         }
+
+        for (String iban : splitPayment.getAccounts()) {
+            User involvedUser = Tools.findUserByAccount(iban, users);
+            if (involvedUser != null) {
+                transactionService.addSplitRejectTransaction(
+                        splitPayment.getTimestamp(),
+                        splitPayment.getAmounts().stream().mapToDouble(Double::doubleValue).sum(),
+                        splitPayment.getAmounts(),
+                        splitPayment.getCurrency(),
+                        splitPayment.getAccounts(),
+                        splitPayment.getSplitPaymentType(),
+                        involvedUser
+                );
+            }
+        }
+
+
+        Tools.removeSplitPaymentFromUsers(splitPayment, users);
+
     }
 
     private void report(final CommandInput command, final ArrayNode output) {
@@ -843,7 +1040,7 @@ public class BankSystem {
             savingsAccount.deposit(interestRate * balance);
 
             transactionService.addInterestTransaction(timestamp, interestRate * balance,
-                                                                savingsAccount.getCurrency(), user);
+                    savingsAccount.getCurrency(), user);
 
         } else {
             interestError("addInterest", timestamp, output);
@@ -937,9 +1134,15 @@ public class BankSystem {
         // Realizează transferul fondurilor
         savings.spend(requiredAmount);
         classicAccount.deposit(amount);
+
+        transactionService.addSavingsWithdrawalTransaction(timestamp, amount, savings.getIban(),
+                classicAccount.getIban(), user);
+        transactionService.addSavingsWithdrawalTransaction(timestamp, amount, savings.getIban(),
+                classicAccount.getIban(), user);
+        // am adaugat de doua ori si pt savings account si pt classic account ale userului
     }
 
-    public void upgradePlan(final CommandInput command) {
+    public void upgradePlan(final CommandInput command, final ArrayNode output) {
         String accountIBAN = command.getAccount();
         String newPlan = command.getNewPlanType();
         int timestamp = command.getTimestamp();
@@ -947,6 +1150,17 @@ public class BankSystem {
         // Find the account and user
         Account account = Tools.findAccountByIBAN(accountIBAN, users);
         if (account == null) {
+            // Creează un nod JSON pentru eroare și îl adaugă în array-ul output
+            ObjectNode errorNode = output.addObject();
+
+            // Setează valorile pentru nodul de nivel superior
+            errorNode.put("command", "upgradePlan");
+            errorNode.put("timestamp", timestamp);
+
+            // Creează un nod "output" în interiorul lui errorNode
+            ObjectNode innerOutput = errorNode.putObject("output");
+            innerOutput.put("description", "Account not found");
+            innerOutput.put("timestamp", timestamp);
             return;
         }
 
@@ -955,7 +1169,19 @@ public class BankSystem {
             return;
         }
 
+        // Only owner can adjust account plan for a business account
+        if (account.isBusinessAccount()) {
+            if (!user.getEmail().equals(account.getOwnerEmail())) {
+                return;
+            }
+        }
+
         String currentPlan = user.getAccountPlan();
+
+        if (newPlan.equals(currentPlan)) {
+            String description = "The user already has the " + newPlan + " plan.";
+            transactionService.addErrorTransaction(timestamp, description, user);
+        }
         double upgradeFeeInRON = 0;
 
         // Find the upgrade fee needed in RON
@@ -1114,6 +1340,332 @@ public class BankSystem {
         }
     }
 
+    public void addNewBusinessAssociate(final CommandInput command) {
+        String iban = command.getAccount();
+        Account businessAccount = Tools.findAccountByIBAN(iban, users);
+        if (businessAccount == null || !businessAccount.getAccountType().equals("business")) {
+            return;
+        }
+
+        String role = command.getRole(); // manager or employee
+        String newEmail = command.getEmail();
+
+        User user = Tools.findUserByEmail(newEmail, users);
+        if (user == null) {
+            return;
+        }
+
+        // Add the account to the user's list of accounts
+        user.addAccount(businessAccount);
+
+        // Synchronize all existing cards in the business account with the new user's account
+        for (Card card : businessAccount.getCards()) {
+            Tools.addCardToAllInstances(card, iban, users);
+        }
+
+        if (role.equals("manager")) {
+            businessAccount.addManagerEmail(newEmail);
+        }
+
+        if (role.equals("employee")) {
+            businessAccount.addEmployeeEmail(newEmail);
+        }
+    }
+
+    public void changeSpendingLimit(final CommandInput command, final ArrayNode output) {
+        int timestamp = command.getTimestamp();
+        ;
+        String email = command.getEmail();
+        String iban = command.getAccount();
+        double newLimit = command.getAmount();
+
+        Account account = Tools.findAccountByIBAN(iban, users);
+        if (account == null || !account.getAccountType().equals("business")) {
+            return;
+        }
+
+        if (!account.getOwnerEmail().equals(email)) {
+            String description = "You must be owner in order to change spending limit.";
+            // Creează un nod JSON pentru eroare
+            ObjectNode errorNode = output.addObject();
+            errorNode.put("command", "changeSpendingLimit");
+            ObjectNode outputNode = errorNode.putObject("output");
+            outputNode.put("description", description);
+            outputNode.put("timestamp", timestamp);
+            errorNode.put("timestamp", timestamp);
+            return;
+        }
+
+        account.setSpendingLimit(newLimit, email);
+    }
+
+    public void changeDepositLimit(final CommandInput command, final ArrayNode output) {
+        int timestamp = command.getTimestamp();
+        String email = command.getEmail();
+        String iban = command.getAccount();
+        double newLimit = command.getAmount();
+
+        Account account = Tools.findAccountByIBAN(iban, users);
+        if (account == null || !account.getAccountType().equals("business")) {
+            return;
+        }
+
+        if (!account.getOwnerEmail().equals(email)) {
+            String description = "You must be owner in order to change deposit limit.";
+            // Creează un nod JSON pentru eroare
+            ObjectNode errorNode = output.addObject();
+            errorNode.put("command", "changeSpendingLimit");
+            ObjectNode outputNode = errorNode.putObject("output");
+            outputNode.put("description", description);
+            outputNode.put("timestamp", timestamp);
+            errorNode.put("timestamp", timestamp);
+            return;
+        }
+
+        account.setDepositLimit(newLimit, email);
+    }
+
+    public void businessReport(CommandInput command, final ArrayNode output) {
+        // Extract fields from CommandInput
+        int startTimestamp = command.getStartTimestamp();
+        int endTimestamp = command.getEndTimestamp();
+        String type = command.getType();
+        int timestamp = command.getTimestamp();
+        String iban = command.getAccount();
+
+        // Find the requested account
+        Account account = Tools.findAccountByIBAN(iban, users);
+        if (account == null) {
+            return;
+        }
+
+        // Only proceed if this is a BusinessAccount
+        if (account instanceof BusinessAccount) {
+            BusinessAccount businessAccount = (BusinessAccount) account;
+
+            // Create the primary report node
+            ObjectNode report = output.objectNode();
+            report.put("command", "businessReport");
+
+            // Create the "output" node, common to both types
+            ObjectNode outputNode = report.putObject("output");
+            outputNode.put("IBAN", iban);
+            outputNode.put("balance", businessAccount.getBalance());
+            outputNode.put("currency", businessAccount.getCurrency());
+            outputNode.put("spending limit", businessAccount.getSpendingLimit());
+            outputNode.put("deposit limit", businessAccount.getDepositLimit());
+
+            // Generate the specific type of report
+            if ("transaction".equalsIgnoreCase(type)) {
+                generateTransactionReport(businessAccount, startTimestamp, endTimestamp, outputNode);
+            } else if ("commerciant".equalsIgnoreCase(type)) {
+                generateCommerciantReport(businessAccount, startTimestamp, endTimestamp, outputNode);
+            }
+
+            // Add the timestamp
+            report.put("timestamp", timestamp);
+
+            // Add the full report to the output array
+            output.add(report);
+        }
+    }
+
+    /**
+     * Generates the transaction report.
+     */
+    private void generateTransactionReport(BusinessAccount businessAccount, int startTimestamp, int endTimestamp, ObjectNode outputNode) {
+        outputNode.put("statistics type", "transaction");
+
+        // Managers array
+        ArrayNode managersNode = outputNode.putArray("managers");
+        for (String email : businessAccount.getManagersEmails()) {
+            ObjectNode managerNode = managersNode.addObject();
+            String username = Tools.extractUsernameFromEmail(email);
+
+            double spent = Tools.calculateSpentBetween(
+                    businessAccount.getAssociateTransactions(),
+                    email,
+                    startTimestamp,
+                    endTimestamp
+            );
+            double deposited = Tools.calculateDepositedBetween(
+                    businessAccount.getAssociateTransactions(),
+                    email,
+                    startTimestamp,
+                    endTimestamp
+            );
+            managerNode.put("username", username);
+            managerNode.put("spent", spent);
+            managerNode.put("deposited", deposited);
+        }
+
+        // Employees array
+        ArrayNode employeesNode = outputNode.putArray("employees");
+        for (String email : businessAccount.getEmployeesEmails()) {
+            ObjectNode employeeNode = employeesNode.addObject();
+            String username = Tools.extractUsernameFromEmail(email);
+
+            double spent = Tools.calculateSpentBetween(
+                    businessAccount.getAssociateTransactions(),
+                    email,
+                    startTimestamp,
+                    endTimestamp
+            );
+            double deposited = Tools.calculateDepositedBetween(
+                    businessAccount.getAssociateTransactions(),
+                    email,
+                    startTimestamp,
+                    endTimestamp
+            );
+            employeeNode.put("username", username);
+            employeeNode.put("spent", spent);
+            employeeNode.put("deposited", deposited);
+        }
+
+        // Calculate total spent and total deposited
+        double totalSpent = businessAccount.getManagersEmails().stream()
+                .mapToDouble(email -> Tools.calculateSpentBetween(
+                        businessAccount.getAssociateTransactions(),
+                        email,
+                        startTimestamp,
+                        endTimestamp
+                ))
+                .sum()
+                + businessAccount.getEmployeesEmails().stream()
+                .mapToDouble(email -> Tools.calculateSpentBetween(
+                        businessAccount.getAssociateTransactions(),
+                        email,
+                        startTimestamp,
+                        endTimestamp
+                ))
+                .sum();
+
+        double totalDeposited = businessAccount.getManagersEmails().stream()
+                .mapToDouble(email -> Tools.calculateDepositedBetween(
+                        businessAccount.getAssociateTransactions(),
+                        email,
+                        startTimestamp,
+                        endTimestamp
+                ))
+                .sum()
+                + businessAccount.getEmployeesEmails().stream()
+                .mapToDouble(email -> Tools.calculateDepositedBetween(
+                        businessAccount.getAssociateTransactions(),
+                        email,
+                        startTimestamp,
+                        endTimestamp
+                ))
+                .sum();
+
+        outputNode.put("total spent", totalSpent);
+        outputNode.put("total deposited", totalDeposited);
+    }
+
+    /**
+     * Generates the commerciant report.
+     */
+    private void generateCommerciantReport(BusinessAccount businessAccount, int startTimestamp, int endTimestamp, ObjectNode outputNode) {
+        outputNode.put("statistics type", "commerciant");
+
+        // Create the "commerciants" array
+        ArrayNode commerciantsArray = outputNode.putArray("commerciants");
+
+        // Get the owner's email to exclude their transactions
+        String ownerEmail = businessAccount.getOwnerEmail();
+
+        // Map of email -> list of TransactionDetail
+        Map<String, List<TransactionDetail>> associateMap = businessAccount.getAssociateTransactions();
+
+        // Map for storing total per commerciant
+        Map<String, Double> totalPerCommerciant = new HashMap<>();
+        // Map for storing managers who paid to each commerciant
+        Map<String, List<String>> managersPerCommerciant = new HashMap<>();
+        // Map for storing employees who paid to each commerciant
+        Map<String, List<String>> employeesPerCommerciant = new HashMap<>();
+
+        // Iterate through each email and associated transactions
+        for (Map.Entry<String, List<TransactionDetail>> entry : associateMap.entrySet()) {
+            String email = entry.getKey();
+
+            // Exclude transactions made by the owner
+            if (email.equals(ownerEmail)) {
+                continue;
+            }
+
+            List<TransactionDetail> transactionDetails = entry.getValue();
+
+            for (TransactionDetail detail : transactionDetails) {
+                // Only interested in "spend" transactions
+                if (!"spend".equalsIgnoreCase(detail.getType())) {
+                    continue;
+                }
+
+                // Check if the transaction has a valid commerciant name
+                String commName = detail.getCommerciantName();
+                if (commName == null || commName.trim().isEmpty()) {
+                    continue;
+                }
+
+                // Check if the timestamp is within the specified range
+                int ts = detail.getTimestamp();
+                if (ts < startTimestamp || ts > endTimestamp) {
+                    continue;
+                }
+
+                // Add the amount to the commerciant's total
+                totalPerCommerciant.put(commName, totalPerCommerciant.getOrDefault(commName, 0.0) + detail.getAmount());
+
+                // Extract the full name of the user
+                String userName = Tools.extractUsernameFromEmail(email);
+                if (userName.isEmpty()) {
+                    continue;
+                }
+
+                // Add the associate (manager/employee) to the corresponding list
+                if (businessAccount.isManager(email)) {
+                    managersPerCommerciant.putIfAbsent(commName, new ArrayList<>());
+                    managersPerCommerciant.get(commName).add(userName); // Allows duplicates
+                } else if (businessAccount.isEmployee(email)) {
+                    employeesPerCommerciant.putIfAbsent(commName, new ArrayList<>());
+                    employeesPerCommerciant.get(commName).add(userName); // Allows duplicates
+                }
+            }
+        }
+
+        // Sort commerciant names alphabetically
+        List<String> sortedCommerciantNames = new ArrayList<>(totalPerCommerciant.keySet());
+        sortedCommerciantNames.sort(String::compareToIgnoreCase);
+
+        // Build the JSON object for each commerciant
+        for (String commName : sortedCommerciantNames) {
+            double totalReceived = totalPerCommerciant.get(commName);
+
+            // Get and sort manager names
+            List<String> mgrNames = managersPerCommerciant.getOrDefault(commName, new ArrayList<>());
+            Collections.sort(mgrNames, String::compareToIgnoreCase);
+
+            // Get and sort employee names
+            List<String> empNames = employeesPerCommerciant.getOrDefault(commName, new ArrayList<>());
+            Collections.sort(empNames, String::compareToIgnoreCase);
+
+            // Create the JSON node for this commerciant
+            ObjectNode commNode = commerciantsArray.addObject();
+            commNode.put("commerciant", commName);
+            commNode.put("total received", totalReceived);
+
+            // Add the list of managers
+            ArrayNode managersNode = commNode.putArray("managers");
+            for (String mgrName : mgrNames) {
+                managersNode.add(mgrName);
+            }
+
+            // Add the list of employees
+            ArrayNode employeesNode = commNode.putArray("employees");
+            for (String empName : empNames) {
+                employeesNode.add(empName);
+            }
+        }
+    }
 }
 
 
