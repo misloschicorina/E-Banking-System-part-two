@@ -1,4 +1,4 @@
-package org.poo.main;
+package org.poo.main.commands;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -9,26 +9,17 @@ import org.poo.fileio.CommandInput;
 
 import java.util.List;
 
-/**
- * Command to print all users in the bank system.
- */
-public class PrintUsersCommand implements Command {
+public final class PrintUsersCommand implements Command {
     private final ObjectMapper objectMapper;
     private final List<User> users;
 
-    /**
-     * Constructs a PrintUsersCommand with the necessary dependencies.
-     *
-     * @param objectMapper the ObjectMapper instance for JSON operations
-     * @param users        the list of users in the bank system
-     */
-    public PrintUsersCommand(ObjectMapper objectMapper, List<User> users) {
+    public PrintUsersCommand(final ObjectMapper objectMapper, final List<User> users) {
         this.objectMapper = objectMapper;
         this.users = users;
     }
 
     @Override
-    public void execute(CommandInput command, ArrayNode output) {
+    public void execute(final CommandInput command, final ArrayNode output) {
         // Create a node as the command result
         ObjectNode commandResultNode = objectMapper.createObjectNode();
         commandResultNode.put("command", "printUsers");

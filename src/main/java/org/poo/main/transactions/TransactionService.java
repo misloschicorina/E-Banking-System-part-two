@@ -108,17 +108,28 @@ public class TransactionService {
         senderUser.addTransaction(sentTransaction);
     }
 
-    public void addSendMoneyToCommerciantTransaction(final int timestamp, final Account sender,
-                                                     final String receiverCommerciantIban, final double amount,
-                                                     final String currency, final String description) {
+    /**
+     * Creates and adds a transaction for sending money to a merchant to the
+     * sender's transaction list.
+     *
+     * @param timestamp                The timestamp of the transaction.
+     * @param sender                   The account from which the money is being sent.
+     * @param receiverCommerciantIban  The IBAN of the merchant receiving the money.
+     * @param amount                   The amount of money being sent.
+     * @param currency                 The currency of the transaction.
+     * @param description              A description of the transaction.
+     */
+    public void addSendMoneyToCommerciantTransaction(
+            final int timestamp, final Account sender,
+            final String receiverCommerciantIban, final double amount,
+            final String currency, final String description) {
         User senderUser = Tools.findUserByEmail(sender.getOwnerEmail(), users);
         Transaction sentTransaction =
                 TransactionFactory.createSentMoneyTransaction(timestamp, sender.getIban(),
                         receiverCommerciantIban, amount, currency);
+
         sentTransaction.setDescription(description);
-
         senderUser.addTransaction(sentTransaction);
-
     }
 
     /**
@@ -218,8 +229,9 @@ public class TransactionService {
      * @param user the user who initiated the split payment.
      */
     public void addSuccessSplitTransaction(final int timestamp, final double totalAmount,
-                                           final List<Double> amountsForUsers, final String currency,
-                                           final List<String> accounts, final String splitPaymentType,
+                                           final List<Double> amountsForUsers,
+                                           final String currency, final List<String> accounts,
+                                           final String splitPaymentType,
                                            final User user) {
         Transaction splitTransaction = TransactionFactory.createSuccessSplitTransaction(
                 timestamp, totalAmount, amountsForUsers, currency, accounts, splitPaymentType);
@@ -240,23 +252,26 @@ public class TransactionService {
         user.addTransaction(interestRateChangeTransaction);
     }
 
-
+    /**
+     * Creates and adds a transaction for a split payment error to the user's transaction list.
+     *
+     * @param timestamp        The timestamp of the transaction.
+     * @param totalAmount      The total amount of the payment.
+     * @param amountsForUsers  The list of amounts assigned to each user.
+     * @param currency         The currency of the transaction.
+     * @param cheapIBAN        The IBAN of the account with insufficient funds.
+     * @param accounts         The list of accounts that the payment is split between.
+     * @param splitPaymentType The type of split payment (e.g., "equal" or "custom").
+     * @param user             The user who initiated the split payment.
+     */
     public void addSplitErrorTransaction(final int timestamp, final double totalAmount,
                                          final List<Double> amountsForUsers, final String currency,
                                          final String cheapIBAN, final List<String> accounts,
                                          final String splitPaymentType, final User user) {
-        // Creăm tranzacția de eroare folosind metoda din TransactionFactory
         Transaction splitTransaction = TransactionFactory.createSplitErrorTransaction(
-                totalAmount,              // Totalul
-                timestamp,                // Timestamp-ul tranzacției
-                amountsForUsers,          // Lista sumelor alocate fiecărui cont
-                currency,                 // Moneda
-                cheapIBAN,                // Contul cu fonduri insuficiente
-                accounts,                 // Conturile implicate
-                splitPaymentType          // Tipul split payment-ului
+                totalAmount, timestamp, amountsForUsers, currency, cheapIBAN,
+                accounts, splitPaymentType
         );
-
-        // Adăugăm tranzacția în lista utilizatorului, menținând ordinea după timestamp
         user.addTransactionByTimestamp(splitTransaction);
     }
 
@@ -319,20 +334,24 @@ public class TransactionService {
         user.addTransaction(interestTransaction);
     }
 
+    /**
+     * Creates and adds a rejected split payment transaction to the user's transaction list.
+     *
+     * @param timestamp        The timestamp of the transaction.
+     * @param totalAmount      The total amount that was attempted to be split.
+     * @param amountsForUsers  The list of amounts assigned to each user.
+     * @param currency         The currency of the transaction.
+     * @param accounts         The list of accounts involved in the split payment.
+     * @param splitPaymentType The type of split payment (e.g., "equal" or "custom").
+     * @param user             The user who initiated the split payment.
+     */
     public void addSplitRejectTransaction(final int timestamp, final double totalAmount,
                                          final List<Double> amountsForUsers, final String currency,
                                          final List<String> accounts,
                                          final String splitPaymentType, final User user) {
         Transaction splitTransaction = TransactionFactory.createSplitRejectTransaction(
-                totalAmount,              // Totalul
-                timestamp,                // Timestamp-ul tranzacției
-                amountsForUsers,          // Lista sumelor alocate fiecărui cont
-                currency,                 // Moneda
-                accounts,                 // Conturile implicate
-                splitPaymentType          // Tipul split payment-ului
+                totalAmount, timestamp, amountsForUsers, currency, accounts, splitPaymentType
         );
-
-        // Adăugăm tranzacția în lista utilizatorului, menținând ordinea după timestamp
         user.addTransactionByTimestamp(splitTransaction);
     }
 
@@ -350,17 +369,12 @@ public class TransactionService {
                                                 final String savingsAccountIBAN,
                                                 final String classicAccountIBAN,
                                                 final User user) {
-        // 1) Create the transaction via the TransactionFactory method
         Transaction transaction = TransactionFactory.createSavingsWithdrawalTransaction(
                 timestamp,
                 amount,
                 savingsAccountIBAN,
                 classicAccountIBAN
         );
-
-        // 2) Add it to the user's transaction list
         user.addTransaction(transaction);
     }
-
-
 }

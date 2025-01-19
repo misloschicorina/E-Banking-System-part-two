@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.HashMap;
 import org.poo.fileio.CommandInput;
 import org.poo.main.Commerciant.Commerciant;
-import org.poo.main.TransactionDetail;
+import org.poo.main.transactions.TransactionDetail;
 import org.poo.main.cards.Card;
 import org.poo.main.split.SplitPayment;
 import org.poo.main.accounts.Account;
@@ -97,7 +97,15 @@ public final class Tools {
         return cardsArray;
     }
 
-    public static ArrayNode printAccountsForUser(final List<Account> accounts, final String ownerEmail) {
+    /**
+     * Converts a user's accounts to a JSON array, filtering by owner email.
+     *
+     * @param accounts   the list of accounts
+     * @param ownerEmail the owner's email to filter by
+     * @return a JSON array of the owner's accounts with their details
+     */
+    public static ArrayNode printAccountsForUser(final List<Account> accounts,
+                                                        final String ownerEmail) {
         ArrayNode accountsArray = ObjectMapper.createArrayNode();
 
         for (Account account : accounts) {
@@ -164,20 +172,18 @@ public final class Tools {
     public static double calculateFinalAmount(final Account account, final double amount,
                                               final List<ExchangeRate> exchangeRates,
                                               final String currency) {
-        // Dacă moneda contului este deja aceeași cu moneda splitului, returnăm direct suma
+        // If the account's currency is the same as the source currency, return the amount directly
         if (account.getCurrency().equals(currency)) {
             return amount;
         }
 
-        // Obținem rata de schimb pentru conversie
         double rate = getExchangeRate(currency, account.getCurrency(), exchangeRates);
 
-        // Verificăm dacă rata de schimb este validă
         if (rate == 0) {
-            throw new IllegalArgumentException("Exchange rate not found for " + currency + " to " + account.getCurrency());
+            throw new IllegalArgumentException("Exchange rate not found ");
         }
 
-        // Convertim suma în moneda contului
+        // Convert the amount to the account's currency
         return amount * rate;
     }
 
@@ -202,25 +208,21 @@ public final class Tools {
 
             // Handle split payment transactions
             if (transaction.getDescription().startsWith("Split payment")) {
-                // Add currency
                 transactionNode.put("currency", transaction.getCurrency());
 
                 // Add amountForUsers as an array
                 ArrayNode amountsForUsersArray = ObjectMapper.createArrayNode();
-                if (transaction.getAmountForUsers() != null ) {
+                if (transaction.getAmountForUsers() != null) {
                     if (transaction.getSplitPaymentType().equals("custom")) {
                         for (Double amount : transaction.getAmountForUsers()) {
                             amountsForUsersArray.add(amount);
                         }
                         transactionNode.set("amountForUsers", amountsForUsersArray);
-                    }
-                    else { // equal type
+                    } else { // equal type
                         double amount = transaction.getAmountForUsers().get(0);
                         transactionNode.put("amount", amount);
-
                     }
                 }
-
 
                 // Add involved accounts as an array
                 ArrayNode involvedAccountsArray = ObjectMapper.createArrayNode();
@@ -237,24 +239,15 @@ public final class Tools {
                 if (transaction.getError() != null) {
                     transactionNode.put("error", transaction.getError());
                 }
-            }
-
-            // Handle specific format for cash withdrawals
-            else if (transaction.getDescription().startsWith("Cash withdrawal")) {
+            } else if (transaction.getDescription().startsWith("Cash withdrawal")) {
                 // Format the amount as an integer for cash withdrawals
                 if (transaction.getAmount() != null) {
                     transactionNode.put("amount", transaction.getAmount().doubleValue());
                 }
-            }
-
-            // Handle upgrade plan transactions
-            else if ("Upgrade plan".equals(transaction.getDescription())) {
+            } else if ("Upgrade plan".equals(transaction.getDescription())) {
                 transactionNode.put("accountIBAN", transaction.getAccountIBAN());
                 transactionNode.put("newPlanType", transaction.getPlan());
-            }
-
-            // Handle interest rate income transactions
-            else if ("Interest rate income".equals(transaction.getDescription())) {
+            } else if ("Interest rate income".equals(transaction.getDescription())) {
                 // Add separate fields for amount and currency
                 if (transaction.getAmount() != null) {
                     transactionNode.put("amount", transaction.getAmount());
@@ -262,10 +255,7 @@ public final class Tools {
                 if (transaction.getCurrency() != null) {
                     transactionNode.put("currency", transaction.getCurrency());
                 }
-            }
-
-            else if ("Savings withdrawal".equals(transaction.getDescription())) {
-                // Format fields exactly as requested:
+            } else if ("Savings withdrawal".equals(transaction.getDescription())) {
                 if (transaction.getAmount() != null) {
                     transactionNode.put("amount", transaction.getAmount());
                 }
@@ -277,10 +267,8 @@ public final class Tools {
                 if (transaction.getSenderIBAN() != null) {
                     transactionNode.put("savingsAccountIBAN", transaction.getSenderIBAN());
                 }
-            }
-
-            // Default handling for other transactions
-            else {
+            } else {
+                // Default handling for other transactions
                 if ("The card has been destroyed".equals(transaction.getDescription())
                         || "New card created".equals(transaction.getDescription())) {
                     transactionNode.put("account", transaction.getAccountIBAN());
@@ -406,18 +394,17 @@ public final class Tools {
 
         // Add general account information
         outputNode.put("IBAN", iban);
-        //outputNode.put("balance", findAccountByIBAN(iban, List.of(user)).getBalance());
         double balance = findAccountByIBAN(iban, List.of(user)).getBalance();
         outputNode.put("balance", balance);
 
 
         outputNode.put("currency", findAccountByIBAN(iban, List.of(user)).getCurrency());
 
-        // AAdd filtered transactions to the output node
+        // Add filtered transactions to the output node
         ArrayNode transactionsArray = getTransactions(filteredTransactions);
         outputNode.set("transactions", transactionsArray);
 
-        // Include commerciants' total transaction amounts if requested
+        // Include commerciants total transaction amounts if requested
         if (includeCommerciants && commerciantsTotals != null) {
             ArrayNode commerciantsArray = objectMapper.createArrayNode();
 
@@ -454,7 +441,8 @@ public final class Tools {
     }
 
     /**
-     * Filters transactions based on the provided command input parameters and a transaction filter.
+     * Filters transactions based on the provided command input parameters
+     * and a transaction filter.
      *
      * @param transactions the list of all transactions to filter
      * @param command the command input containing the timestamp range
@@ -542,7 +530,8 @@ public final class Tools {
      * @param commerciants  The list of commerciants to search in.
      * @return The commerciant if found, null otherwise.
      */
-    public static Commerciant findCommerciantByIBAN(final String iban, final List<Commerciant> commerciants) {
+    public static Commerciant findCommerciantByIBAN(final String iban,
+                                                    final List<Commerciant> commerciants) {
         for (Commerciant commerciant : commerciants) {
             if (commerciant.getAccount().equals(iban)) {
                 return commerciant;
@@ -552,67 +541,34 @@ public final class Tools {
     }
 
     /**
-     * Calculates transaction fee based on the user plan.
+     * Finds a card by its card number from a list of users.
      *
-     * @param plan         The plan type of the user.
-     * @param amount       The amount for which fee needs to be calculated.
-     * @param currency     The currency of the amount.
-     * @param exchangeRates The list of available exchange rates.
-     * @return The calculated fee.
+     * @param cardNumber the card number to search for
+     * @param users      the list of users
+     * @return the card with the specified card number, or null if not found
      */
-    public static double calculateFee(final String plan, final double amount, final String currency,
-                                      final List<ExchangeRate> exchangeRates) {
-        double fee = 0;
-
-        // Convert the amount to RON for comparison
-        double amountInRON = ExchangeRate.convertToRON(amount, currency, exchangeRates);
-
-        switch (plan) {
-            case "standard":
-                // Calculate fee directly based on the given amount
-                fee = amount * 0.002; // 0.2% fee
-                break;
-
-            case "silver":
-                // Apply a lower fee only if the equivalent amount in RON >= 500
-                if (amountInRON >= 500) {
-                    double amountForFee = ExchangeRate.convertToRON(amount, currency, exchangeRates);
-                    fee = amountForFee * 0.001; // 0.1% fee
-                    fee = ExchangeRate.convertFromRON(fee, currency, exchangeRates); // Convert back to the original currency
-                } else {
-                    fee = amount * 0.002; // Default fee for silver if amount < 500 RON
-                }
-                break;
-
-            case "gold":
-            case "student":
-                fee = 0; // No fee
-                break;
-
-            default:
-                fee = 0; // Default to no fee
-        }
-
-        return fee;
-    }
-
     public static Card findCardByCardNumber(final String cardNumber, final List<User> users) {
-        // Iterăm prin toți utilizatorii
         for (User user : users) {
-            // Iterăm prin toate conturile utilizatorului
             for (Account account : user.getAccounts()) {
-                // Iterăm prin toate cardurile fiecărui cont
                 for (Card card : account.getCards()) {
                     if (card.getCardNumber().equals(cardNumber)) {
-                        return card; // Returnăm cardul găsit
+                        return card;
                     }
                 }
             }
         }
-        return null; // Cardul nu a fost găsit
+        return null; // card not found
     }
 
-    public static Commerciant findCommerciantByName(String name, final List<Commerciant> commerciants) {
+    /**
+     * Finds a commerciant by name from a list of commerciants.
+     *
+     * @param name         the name of the commerciant
+     * @param commerciants the list of commerciants
+     * @return the commerciant with the specified name, or null if not found
+     */
+    public static Commerciant findCommerciantByName(final String name,
+                                                    final List<Commerciant> commerciants) {
         for (Commerciant commerciant : commerciants) {
             if (commerciant.getName().equalsIgnoreCase(name)) {
                 return commerciant;
@@ -621,7 +577,18 @@ public final class Tools {
         return null;
     }
 
-    public static String verifyAmounts(SplitPayment splitPayment, List<ExchangeRate> exchangeRates, List<User> users) {
+    /**
+     * Verifies if the accounts involved in a split payment have sufficient funds.
+     *
+     * @param splitPayment   the split payment details
+     * @param exchangeRates  the list of exchange rates
+     * @param users          the list of users
+     * @return the IBAN of the account with insufficient funds, or null if
+     * all accounts have sufficient funds
+     */
+    public static String verifyAmounts(final SplitPayment splitPayment,
+                                       final List<ExchangeRate> exchangeRates,
+                                       final List<User> users) {
         List<String> accounts = splitPayment.getAccounts();
         List<Double> amounts = splitPayment.getAmounts();
         String currency = splitPayment.getCurrency();
@@ -630,36 +597,31 @@ public final class Tools {
             String accountIBAN = accounts.get(i);
             double amount = amounts.get(i);
 
-            if (splitPayment.getAmounts().size() == 3) {
-                System.out.println("Accounts in SplitPayment: " + splitPayment.getAccounts());
-                System.out.println("Amounts in SplitPayment: " + splitPayment.getAmounts());
-            }
-
-            // Obținem contul utilizând IBAN-ul
             Account account = Tools.findAccountByIBAN(accountIBAN, users);
 
             if (account == null) {
-                throw new IllegalArgumentException("Account with IBAN " + accountIBAN + " not found.");
+                return null;
             }
 
-            if (splitPayment.getAmounts().size() == 3) {
-                System.out.println("Accounts in SplitPayment: " + splitPayment.getAccounts());
-                System.out.println("Amounts in SplitPayment: " + splitPayment.getAmounts());
-            }
+            double convertedAmount =
+                    Tools.calculateFinalAmount(account, amount, exchangeRates, currency);
 
-            // Convertim suma în moneda contului
-            double convertedAmount = Tools.calculateFinalAmount(account, amount, exchangeRates, currency);
-
-            // Verificăm dacă balanța contului este suficientă
             if (account.getBalance() < convertedAmount) {
-                return accountIBAN; // Returnăm IBAN-ul contului care nu are suficiente fonduri
+                return accountIBAN;
             }
         }
 
-        return null; // To
+        return null;
     }
 
-    public static void removeSplitPaymentFromUsers(final SplitPayment splitPayment, final List<User> users) {
+    /**
+     * Removes a split payment from all users involved.
+     *
+     * @param splitPayment the split payment to remove
+     * @param users        the list of users
+     */
+    public static void removeSplitPaymentFromUsers(final SplitPayment splitPayment,
+                                                            final List<User> users) {
         for (String iban : splitPayment.getAccounts()) {
             User user = findUserByAccount(iban, users);
             if (user != null) {
@@ -675,48 +637,73 @@ public final class Tools {
      * @param iban   the IBAN of the account
      * @param users  the list of all users in the system
      */
-    public static void addCardToAllInstances(Card card, String iban, List<User> users) {
+    public static void addCardToAllInstances(final Card card, final String iban,
+                                                        final List<User> users) {
         for (User user : users) {
             for (Account account : user.getAccounts()) {
                 if (account.getIban().equals(iban)) {
-                    // Verificăm dacă cardul nu există deja
                     if (!account.getCards().contains(card)) {
-                        account.addCard(card); // Adaugă cardul în contul cu IBAN-ul respectiv
+                        account.addCard(card);
                     }
                 }
             }
         }
     }
 
-    public static double calculateSpentBetween(
-            Map<String, List<TransactionDetail>> associateTransactions,
-            String email,
-            int startTimestamp,
-            int endTimestamp) {
-        List<TransactionDetail> transactions = associateTransactions.getOrDefault(email, new ArrayList<>());
+    /**
+     * Calculates the total spending for transactions of type "spend" within a given time range.
+     *
+     * @param associateTransactions the map of transactions grouped by email
+     * @param email                 the email of the user
+     * @param startTimestamp        the start of the time range
+     * @param endTimestamp          the end of the time range
+     * @return the total spending amount
+     */
+    public static double calculateSpentBetween(final Map<String,
+            List<TransactionDetail>> associateTransactions, final String email,
+                                               final int startTimestamp,
+                                               final int endTimestamp) {
+        List<TransactionDetail> transactions =
+                associateTransactions.getOrDefault(email, new ArrayList<>());
         return transactions.stream()
-                .filter(t -> t.getType().equals("spend") &&
-                        t.getTimestamp() >= startTimestamp &&
-                        t.getTimestamp() <= endTimestamp)
+                .filter(t -> t.getType().equals("spend")
+                        && t.getTimestamp() >= startTimestamp
+                        && t.getTimestamp() <= endTimestamp)
                 .mapToDouble(TransactionDetail::getAmount)
                 .sum();
     }
 
-    public static double calculateDepositedBetween(
-            Map<String, List<TransactionDetail>> associateTransactions,
-            String email,
-            int startTimestamp,
-            int endTimestamp) {
-        List<TransactionDetail> transactions = associateTransactions.getOrDefault(email, new ArrayList<>());
+    /**
+     * Calculates the total deposited amount for transactions of type "deposit"
+     * within a given time range.
+     *
+     * @param associateTransactions the map of transactions grouped by email
+     * @param email                 the email of the user
+     * @param startTimestamp        the start of the time range
+     * @param endTimestamp          the end of the time range
+     * @return the total deposited amount
+     */
+    public static double calculateDepositedBetween(final Map<String,
+            List<TransactionDetail>> associateTransactions, final String email,
+                                                   final int startTimestamp,
+                                                   final int endTimestamp) {
+        List<TransactionDetail> transactions =
+                associateTransactions.getOrDefault(email, new ArrayList<>());
         return transactions.stream()
-                .filter(t -> t.getType().equals("deposit") &&
-                        t.getTimestamp() >= startTimestamp &&
-                        t.getTimestamp() <= endTimestamp)
+                .filter(t -> t.getType().equals("deposit")
+                        && t.getTimestamp() >= startTimestamp
+                        && t.getTimestamp() <= endTimestamp)
                 .mapToDouble(TransactionDetail::getAmount)
                 .sum();
     }
 
-    public static String extractUsernameFromEmail(String email) {
+    /**
+     * Extracts a username from an email address.
+     *
+     * @param email the email address to extract the username from
+     * @return the formatted username in the form "LastName FirstName"
+     */
+    public static String extractUsernameFromEmail(final String email) {
         // Split the email at '@' and then at '_'
         String[] parts = email.split("@")[0].split("_");
         if (parts.length >= 2) {
@@ -726,43 +713,51 @@ public final class Tools {
                 if (i > 1) {
                     lastNames.append(" ");
                 }
-                lastNames.append(capitalizeWithHyphen(parts[i]));
+                lastNames.append(formatWithHyphen(parts[i]));
             }
 
             // Extract first name (the first part)
-            String firstName = capitalizeWithHyphen(parts[0]);
+            String firstName = formatWithHyphen(parts[0]);
 
             // Combine last names and first name
             return lastNames.toString() + " " + firstName;
         }
 
         // If there's only one part, just capitalize it
-        return capitalizeWithHyphen(parts[0]);
+        return formatWithHyphen(parts[0]);
     }
 
     /**
-     * Capitalizes each word, including those separated by hyphens.
-     * Preserves the original case if the part is entirely uppercase.
+     * Formats a string by ensuring each hyphen-separated part is properly capitalized.
+     * Maintains the capitalization of parts that are entirely uppercase or lowercase.
      *
      * @param str the input string
-     * @return the capitalized string
+     * @return the formatted string
      */
-    private static String capitalizeWithHyphen(String str) {
-        String[] hyphenParts = str.split("-");
-        for (int i = 0; i < hyphenParts.length; i++) {
-            if (hyphenParts[i].isEmpty()) {
-                continue; // Skip empty parts
-            }
-            if (isAllUpperCase(hyphenParts[i])) {
-                // Preserve uppercase if the part is entirely uppercase
-                hyphenParts[i] = hyphenParts[i];
+    private static String formatWithHyphen(final String str) {
+        String[] words = str.split("-");
+        for (int i = 0; i < words.length; i++) {
+            if (isAllUpperCase(words[i]) || isAllLowerCase(words[i])) {
+                // Preserve the original case if the word is entirely uppercase or lowercase
+                words[i] = words[i];
             } else {
-                // Capitalize the first letter and lowercase the rest
-                hyphenParts[i] = hyphenParts[i].substring(0, 1).toUpperCase() +
-                        hyphenParts[i].substring(1).toLowerCase();
+                words[i] = capitalizeFirstLetter(words[i]);
             }
         }
-        return String.join("-", hyphenParts);
+        return String.join("-", words);
+    }
+
+    /**
+     * Capitalizes the first letter of a word while keeping the rest of the letters lowercase.
+     *
+     * @param str the input string
+     * @return the string with the first letter capitalized
+     */
+    private static String capitalizeFirstLetter(final String str) {
+        if (str.isEmpty()) {
+            return str;
+        }
+        return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
     }
 
     /**
@@ -771,7 +766,7 @@ public final class Tools {
      * @param str the input string
      * @return true if all characters are uppercase, false otherwise
      */
-    private static boolean isAllUpperCase(String str) {
+    private static boolean isAllUpperCase(final String str) {
         for (char c : str.toCharArray()) {
             if (Character.isLetter(c) && !Character.isUpperCase(c)) {
                 return false;
@@ -780,8 +775,30 @@ public final class Tools {
         return true;
     }
 
-    public static boolean isCommerciantIban(final String iban, final List<Commerciant> commerciants) {
-        // method to verify in the list of commerciants if the given iban is of one commerciant
+    /**
+     * Checks if the entire string is in lowercase.
+     *
+     * @param str the input string
+     * @return true if all characters are lowercase, false otherwise
+     */
+    private static boolean isAllLowerCase(final String str) {
+        for (char c : str.toCharArray()) {
+            if (Character.isLetter(c) && !Character.isLowerCase(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Checks if the given IBAN belongs to a commerciant from the provided list of commerciants.
+     *
+     * @param iban         the IBAN to check
+     * @param commerciants the list of commerciants to search through
+     * @return true if the IBAN belongs to one of the commerciants, return false otherwise
+     */
+    public static boolean isCommerciantIban(final String iban,
+                                                    final List<Commerciant> commerciants) {
         for (Commerciant commerciant : commerciants) {
             if (commerciant.getAccount().equals(iban)) {
                 return true;
@@ -797,7 +814,7 @@ public final class Tools {
      * @param users the list of users to search within
      * @return the Account object with the matching alias, or null if not found
      */
-    public static Account findAccountByAlias(String alias, List<User> users) {
+    public static Account findAccountByAlias(final String alias, final List<User> users) {
         if (alias == null || alias.isEmpty() || users == null) {
             return null;
         }
@@ -818,5 +835,52 @@ public final class Tools {
         return null; // Return null if no matching account is found
     }
 
+    /**
+     * Calculates the commission fee for a transaction based on the user's account plan,
+     * transaction amount, and currency.
+     *
+     * @param user          the user whose commission is calculated
+     * @param amount        the transaction amount
+     * @param currency      the currency of the transaction
+     * @param exchangeRates the exchange rates for currency conversion
+     * @return the calculated commission fee
+     */
+    public static double calculateComision(final User user, final double amount,
+                                           final String currency,
+                                           final List<ExchangeRate> exchangeRates) {
+        // Get the user plan
+        String plan = user.getAccountPlan();
+        double fee = 0;
 
+        // Convert the silver threshold into currency of user
+        double thresholdSilver = 500;
+        if (!currency.equals("RON")) {
+            double exchangeRate = ExchangeRate.getExchangeRate("RON", currency, exchangeRates);
+            thresholdSilver = Math.round((500.0 * exchangeRate) * 100.0) / 100.0;
+        }
+
+        // Calculate commision
+        switch (plan) {
+            case "standard":
+                fee = amount * 0.002;
+                break;
+
+            case "student":
+            case "gold":
+                fee = 0;
+                break;
+
+            case "silver":
+                if (amount >= thresholdSilver) {
+                    fee = amount * 0.001;
+                }
+                break;
+
+            default:
+                // unknown plan
+                fee = 0;
+        }
+
+        return fee;
+    }
 }

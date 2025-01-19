@@ -211,6 +211,17 @@ public final class TransactionFactory {
         );
     }
 
+    /**
+     * Creates a transaction for a successful split payment.
+     *
+     * @param timestamp       The timestamp of the transaction.
+     * @param totalAmount     The total amount to be split among users.
+     * @param amountsForUsers A list of amounts corresponding to each user involved in the split.
+     * @param currency        The currency of the split payment.
+     * @param accounts        A list of account IBANs involved in the split payment.
+     * @param splitPaymentType The type of split payment (e.g., "equal", "custom").
+     * @return The created transaction for a successful split payment.
+     */
     public static Transaction createSuccessSplitTransaction(
             final int timestamp, final double totalAmount, final List<Double> amountsForUsers,
             final String currency, final List<String> accounts, final String splitPaymentType) {
@@ -222,11 +233,23 @@ public final class TransactionFactory {
                 null, null, null, null,
                 null, null, accounts,
                 null, null,
-                splitPaymentType, // Tipul split payment-ului (e.g., "equal", "custom")
-                amountsForUsers   // Lista cu sumele asociate fiecărui utilizator
+                splitPaymentType,
+                amountsForUsers
         );
     }
 
+    /**
+     * Creates a transaction for a failed split payment due to insufficient funds in one account.
+     *
+     * @param totalAmount     The total amount attempted to be split among users.
+     * @param timestamp       The timestamp of the transaction.
+     * @param amountsForUsers A list of amounts corresponding to each user involved in the split.
+     * @param currency        The currency of the split payment.
+     * @param cheapIban       The IBAN of the account with insufficient funds.
+     * @param accounts        A list of account IBANs involved in the split payment.
+     * @param splitPaymentType The type of split payment (e.g., "equal", "custom").
+     * @return The created transaction for a failed split payment due to insufficient funds.
+     */
     public static Transaction createSplitErrorTransaction(
             final double totalAmount, final int timestamp,
             final List<Double> amountsForUsers, final String currency,
@@ -244,9 +267,9 @@ public final class TransactionFactory {
                 null, null, totalAmount, currency,
                 null, null, null, null,
                 null, null, accounts, errorMessage,
-                null,                         // Valoare pentru `plan`
-                splitPaymentType,             // Tipul split payment-ului
-                amountsForUsers               // Lista sumelor pentru utilizatori
+                null,
+                splitPaymentType,
+                amountsForUsers
         );
     }
 
@@ -367,6 +390,17 @@ public final class TransactionFactory {
         );
     }
 
+    /**
+     * Creates a transaction for a rejected split payment.
+     *
+     * @param totalAmount     The total amount that was attempted to be split among users.
+     * @param timestamp       The timestamp of the transaction.
+     * @param amountsForUsers A list of amounts corresponding to each user involved in the split.
+     * @param currency        The currency of the split payment.
+     * @param accounts        A list of account IBANs involved in the split payment.
+     * @param splitPaymentType The type of split payment (e.g., "equal", "custom").
+     * @return The created transaction for a rejected split payment.
+     */
     public static Transaction createSplitRejectTransaction(
             final double totalAmount, final int timestamp,
             final List<Double> amountsForUsers, final String currency,
@@ -383,9 +417,7 @@ public final class TransactionFactory {
                 null, null, totalAmount, currency,
                 null, null, null, null,
                 null, null, accounts, errorMessage,
-                null,                         // Valoare pentru `plan`
-                splitPaymentType,             // Tipul split payment-ului
-                amountsForUsers               // Lista sumelor pentru utilizatori
+                null, splitPaymentType, amountsForUsers
         );
     }
 
@@ -406,31 +438,11 @@ public final class TransactionFactory {
 
         return new Transaction(
                 timestamp,
-                "Savings withdrawal",     // description
-                savingsAccountIBAN,      // senderIBAN
-                classicAccountIBAN,      // receiverIBAN
-                amount,                  // amount
-                null,                    // currency (null if none provided)
-                null,            // transferType (arbitrary, e.g., "withdrawal")
-                null,                    // cardNumber
-                null,                    // cardHolder
-                null,                    // accountIBAN
-                null,                    // commerciant
-                null,                    // exchangeRate
-                null,                    // error
-                null,
-                null,                    // plan
-                null,                    // splitPaymentType
-                null                     // amountForUsers
+                "Savings withdrawal",
+                savingsAccountIBAN, classicAccountIBAN, amount, null,
+                null, null, null, null,
+                null, null, null, null,
+                null, null, null
         );
     }
-
-
-
-
-
-
-
-
-
 }

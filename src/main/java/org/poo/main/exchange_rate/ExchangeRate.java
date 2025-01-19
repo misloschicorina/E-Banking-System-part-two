@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.AbstractMap;
-import java.util.ArrayList;
 
 /**
  * Represents the exchange rate between two currencies.

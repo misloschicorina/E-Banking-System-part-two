@@ -1,12 +1,10 @@
 package org.poo.main.accounts;
 
-import org.poo.main.CashbackInfo;
+import org.poo.main.cashback.CashbackInfo;
 import org.poo.main.Commerciant.Commerciant;
-import org.poo.main.TransactionDetail;
 import org.poo.main.cards.Card;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.user.User;
-import org.poo.main.CashbackInfo;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,7 +24,7 @@ public abstract class Account {
     private double minBalance;
     private List<Card> cards; // List of cards associated with the account
     private String accountPlan;
-    private double totalSpendingThreshold; // Suma totală cheltuită pentru strategia spendingThreshold
+    private double totalSpendingThreshold;
 
     private final Map<Commerciant, CashbackInfo> cashbackInfo;
     private static final double THRESHOLD_100 = 100.0;
@@ -137,18 +135,6 @@ public abstract class Account {
         this.minBalance = minBalance;
     }
 
-    public double getTotalSpendingThreshold() {
-        return totalSpendingThreshold;
-    }
-
-    public void setTotalSpendingThreshold(final double amount) {
-        totalSpendingThreshold = amount;
-    }
-
-    public void addToTotalSpendingThreshold(final double amount) {
-        this.totalSpendingThreshold += amount;
-    }
-
     /**
      * Returns the current plan of the account.
      * Designed for extension, subclasses can override this method.
@@ -174,8 +160,28 @@ public abstract class Account {
      *
      * @param amount the new balance to set
      */
-    public void setBalance(double amount) {
+    public void setBalance(final double amount) {
         this.balance = amount;
+    }
+
+    /**
+     * Gets the total spending threshold for the account.
+     * To be overridden or used in subclasses where applicable.
+     *
+     * @return the total spending threshold
+     */
+    public double getTotalSpendingThreshold() {
+        return totalSpendingThreshold;
+    }
+
+    /**
+     * Adds a specified amount to the total spending threshold.
+     * To be overridden or used in subclasses where applicable.
+     *
+     * @param amount the amount to add
+     */
+    public void addToTotalSpendingThreshold(final double amount) {
+        this.totalSpendingThreshold += amount;
     }
 
     /**
@@ -232,140 +238,220 @@ public abstract class Account {
         return false;
     }
 
+    /**
+     * Checks if the account is a business account.
+     *
+     * @return true if business account, false otherwise
+     */
     public boolean isBusinessAccount() {
         return false;
     }
 
+    /**
+     * Adds a manager's email. To be overridden in subclasses like BusinessAccount.
+     *
+     * @param managerEmail the manager's email
+     * @throws UnsupportedOperationException if not supported
+     */
     public void addManagerEmail(final String managerEmail) {
-        throw new UnsupportedOperationException("setManagerEmail is not supported for this account type.");
+        throw new UnsupportedOperationException("command not supported for this account type.");
     }
 
+    /**
+     * Adds an employee's email. To be overridden in subclasses like BusinessAccount.
+     *
+     * @param employeeEmail the employee's email
+     * @throws UnsupportedOperationException if not supported
+     */
     public void addEmployeeEmail(final String employeeEmail) {
-        throw new UnsupportedOperationException("addEmployeeEmail is not supported for this account type.");
+        throw new UnsupportedOperationException("command not supported for this account type.");
     }
 
+    /**
+     * Sets the spending limit. To be overridden in subclasses like BusinessAccount.
+     *
+     * @param newLimit the spending limit
+     * @param email the requester email
+     * @throws UnsupportedOperationException if not supported
+     */
     public void setSpendingLimit(final double newLimit, final String email) {
-        System.out.println("setSpendingLimit is not supported for this account type.");
+        throw new UnsupportedOperationException("command not supported for this account type.");
     }
 
+    /**
+     * Sets the deposit limit. To be overridden in subclasses like BusinessAccount.
+     *
+     * @param newLimit the deposit limit
+     * @param email the requester email
+     * @throws UnsupportedOperationException if not supported
+     */
     public void setDepositLimit(final double newLimit, final String email) {
-        System.out.println("setDepositLimit is not supported for this account type.");
+        throw new UnsupportedOperationException("command not supported for this account type.");
     }
 
-    public void changeLimitInAccountCurrency(List<ExchangeRate> exchangeRates) {
-        System.out.println("changeLimitInAccountCurrency is not supported for this account type.");
-    }
-
+    /**
+     * Gets the spending limit. Default is 0.
+     *
+     * @return the spending limit
+     */
     public double getSpendingLimit() {
         return 0;
     }
 
+    /**
+     * Gets the deposit limit. Default is 0.
+     *
+     * @return the deposit limit
+     */
     public double getDepositLimit() {
         return 0;
     }
 
-    public boolean isManager(String email) {
+    /**
+     * Checks if the provided email belongs to a manager.
+     * To be overridden in subclasses like BusinessAccount.
+     *
+     * @param email the email to check
+     * @return false by default
+     */
+    public boolean isManager(final String email) {
         return false;
     }
 
-    public boolean isEmployee(String email) {
+    /**
+     * Checks if the provided email belongs to an employee.
+     * To be overridden in subclasses like BusinessAccount.
+     *
+     * @param email the email to check
+     * @return false by default
+     */
+    public boolean isEmployee(final String email) {
         return false;
     }
 
-    public void addSpending(String email, double amount, int timestamp, String commerciantNAme) {
+    /**
+     * Checks if the provided email is associated with the account.
+     * To be overridden in subclasses like BusinessAccount.
+     *
+     * @param email the email to check
+     * @return false by default
+     */
+    public boolean isAssociate(final String email) {
+        return false;
     }
 
-    public void addDeposit(String email, double amount, int timestamp) {
+    /**
+     * Adds spending information.
+     * To be overridden in subclasses like BusinessAccount.
+     *
+     * @param email the email associated with the spending
+     * @param amount the amount spent
+     * @param timestamp the timestamp of the spending
+     * @param commerciantName the name of the merchant
+     */
+    public void addSpending(final String email, final double amount, final int timestamp,
+                            final String commerciantName) {
     }
 
-    public String isApplyingCashback(final Commerciant commerciant, final String accountCurrency,
+    /**
+     * Adds deposit information.
+     * To be overridden in subclasses like BusinessAccount.
+     *
+     * @param email the email associated with the deposit
+     * @param amount the amount deposited
+     * @param timestamp the timestamp of the deposit
+     */
+    public void addDeposit(final String email, final double amount, final int timestamp) {
+    }
+
+    /**
+     * Determines if cashback can be applied based on the merchant's strategy.
+     *
+     * @param commerciant the merchant involved in the transaction
+     * @param accCurrency the currency of the account
+     * @param exchangeRates the list of exchange rates for currency conversion
+     * @return the cashback strategy if applicable, otherwise null
+     * @throws IllegalArgumentException if the merchant or exchange rates are null
+     */
+    public String isApplyingCashback(final Commerciant commerciant, final String accCurrency,
                                      final List<ExchangeRate> exchangeRates) {
-        // Obținem strategia de cashback a comerciantului
-        String strategy = commerciant.getCashbackStrategy();
-        String category = commerciant.getType(); // Food, Clothes, Tech
+        if (commerciant == null || exchangeRates == null) {
+            throw new IllegalArgumentException("Merchant and exchange rates cannot be null.");
+        }
 
-        // Verificăm dacă comerciantul are strategia 'spendingThreshold'
+        // Retrieve the merchant's cashback strategy and category
+        String strategy = commerciant.getCashbackStrategy();
+        String category = commerciant.getType(); // E.g., Food, Clothes, Tech
+
+        // Check for 'spendingThreshold' strategy
         if ("spendingThreshold".equals(strategy)) {
-            // Calculăm totalul cheltuit până acum pentru comercianții cu strategia spendingThreshold
             double totalSpentForThreshold = this.getTotalSpendingThreshold();
 
-            // Conversie prag în moneda contului
+            // Convert threshold to account currency
             double threshold100 = THRESHOLD_100;
-
-            if (!accountCurrency.equals("RON")) { // Conversie din RON în moneda contului
-                double exchangeRate = ExchangeRate.getExchangeRate("RON", accountCurrency, exchangeRates); // Invers!
-                threshold100 = Math.round((100.0 * exchangeRate) * 100.0) / 100.0;
+            if (!accCurrency.equals("RON")) {
+                double exchangeRate = ExchangeRate.getExchangeRate("RON",
+                                                            accCurrency, exchangeRates);
+                threshold100 = threshold100 * exchangeRate;
             }
 
-            System.out.println("total: " + totalSpentForThreshold);
-            System.out.println("prag convertit: " + threshold100);
-
-            // Verificăm dacă totalul cheltuit atinge pragul minim de 100 în moneda contului
+            // Check if the spending threshold is met
             if (totalSpentForThreshold >= threshold100) {
-                return "spendingThreshold";  // Se poate aplica cashback
+                return "spendingThreshold";
             }
         }
 
-        // Verificăm dacă comerciantul are strategia 'nrOfTransactions'
+        // Check for 'nrOfTransactions' strategy
         if ("nrOfTransactions".equals(strategy)) {
-            // Verificăm categoriile de comerciant pentru nrOfTransactions (Food, Clothes, Tech)
+            // Validate merchant categories for transaction-based cashback
             if (category.equalsIgnoreCase("Food")
                     || category.equalsIgnoreCase("Clothes")
                     || category.equalsIgnoreCase("Tech")) {
-                return "nrOfTransactions";  // Se poate aplica cashback
+                return "nrOfTransactions";
             }
         }
-        return null;  // Nu se poate aplica cashback
 
+        return null; // No applicable cashback strategy
     }
 
-    public double applyCashbackForTransaction(final Commerciant commerciant, final double amount,
-                                              final String cashbackType, final String currency, final String paymentCurrency,
-                                              final List<ExchangeRate> exchangeRates, final User user){
-        String plan = user.getAccountPlan();
+    /**
+     * Applies cashback to a transaction based on the provided strategy.
+     *
+     * @param commerciant the merchant involved in the transaction
+     * @param amount the transaction amount
+     * @param cashbackType the cashback strategy (e.g., "nrOfTransactions", "spendingThreshold")
+     * @param transactionCurrency the currency of the transaction
+     * @param paymentCurrency the payment currency
+     * @param exchangeRates the list of exchange rates for currency conversion
+     * @param user the user associated with the account
+     * @return the calculated cashback amount
+     * @throws IllegalArgumentException if the merchant or user are null
+     */
+    public double applyCashbackForTransaction(final Commerciant commerciant,
+                                              final double amount,
+                                              final String cashbackType,
+                                              final String transactionCurrency,
+                                              final String paymentCurrency,
+                                              final List<ExchangeRate> exchangeRates,
+                                              final User user) {
+        if (commerciant == null || user == null) {
+            throw new IllegalArgumentException("Merchant and user cannot be null.");
+        }
 
+        // Retrieve the user's account plan and merchant cashback info
+        String plan = user.getAccountPlan();
         CashbackInfo info = cashbackInfo.getOrDefault(commerciant, new CashbackInfo());
         double cashback = 0.0;
 
-        // Verificăm tipul de cashback și aplicăm corespunzător
+        // Apply the appropriate cashback strategy
         if ("nrOfTransactions".equals(cashbackType)) {
-            // Aplicăm cashback pentru nrOfTransactions
-            cashback = info.calculateTransactionCashback(amount, commerciant); // Calculăm cashback-ul din nrOfTransactions
-            // System.out.println("Cashback aplicat pentru nrOfTransactions: " + cashback);
+            cashback = info.calculateTransactionCashback(amount, commerciant);
         } else if ("spendingThreshold".equals(cashbackType)) {
-            // Aplicăm cashback pentru spendingThreshold
-            cashback = info.calculateSpendingCashback(amount, plan, currency, paymentCurrency, exchangeRates, this); // Calculăm cashback-ul din spendingThreshold
-            // System.out.println("Cashback aplicat pentru spendingThreshold: " + cashback);
-        } else {
-            System.out.println("Tipul de cashback nu este valid.");
+            cashback = info.calculateSpendingCashback(amount, plan,
+                    transactionCurrency, paymentCurrency, exchangeRates, this);
         }
 
-        return cashback;  // Returnăm doar cashback-ul calculat, fără a modifica suma de plată
+        return cashback;
     }
-
-    public void addTransactionToCommerciant(final Commerciant commerciant, final double amount,
-                                            final String transactionCurrency,
-                                            final String paymentCurrency,
-                                            final List<ExchangeRate> exchangeRates) {
-        // Obținem informațiile despre cashback pentru comerciant
-        CashbackInfo info = cashbackInfo.getOrDefault(commerciant, new CashbackInfo());
-
-        // Adăugăm tranzacția la informațiile despre cashback
-        info.addTransaction(amount, transactionCurrency, paymentCurrency, exchangeRates);
-
-        // Actualizăm informațiile comerciantului în map
-        cashbackInfo.put(commerciant, info); // Adăugăm comerciantul ca și cheie
-    }
-
-
-    public boolean isAssociate(String email) {
-        // always return false
-        return false;
-    }
-
-    public void displayAssociateTransactions() {
-    }
-
-
 
 }

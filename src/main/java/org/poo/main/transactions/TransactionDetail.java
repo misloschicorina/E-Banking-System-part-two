@@ -1,15 +1,17 @@
-package org.poo.main;
+package org.poo.main.transactions;
 
-public class TransactionDetail {
+/**
+ * Represents the details of a transaction.
+ * A transaction can be of type "spend" or "deposit" and includes additional metadata.
+ */
+public final class TransactionDetail {
     private String type; // "spend" sau "deposit"
     private double amount;
     private int timestamp;
     private String commerciantName;
 
-    /**
-     * Constructorul inițial, la care adăugăm și commerciantName.
-     */
-    public TransactionDetail(String type, double amount, int timestamp, String commerciantName) {
+    public TransactionDetail(final String type, final double amount, final int timestamp,
+                                                        final String commerciantName) {
         this.type = type;
         this.amount = amount;
         this.timestamp = timestamp;

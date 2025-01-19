@@ -3,7 +3,14 @@ package org.poo.main.accounts;
 /**
  * Factory class for creating accounts.
  */
-public class AccountFactory {
+public final class AccountFactory {
+
+    /**
+     * Private constructor to prevent instantiation.
+     */
+    private AccountFactory() {
+        throw new UnsupportedOperationException("Utility class cannot be instantiated.");
+    }
 
     public enum AccountType {
         CLASSIC, SAVINGS, BUSINESS
@@ -20,11 +27,11 @@ public class AccountFactory {
      * @return a new instance of an Account
      */
     public static Account createAccount(
-            AccountType accountType,
-            String currency,
-            String email,
-            String iban,
-            Double interestRate) {
+            final AccountType accountType,
+            final String currency,
+            final String email,
+            final String iban,
+            final Double interestRate) {
 
         switch (accountType) {
             case CLASSIC:
@@ -32,7 +39,8 @@ public class AccountFactory {
 
             case SAVINGS:
                 if (interestRate == null) {
-                    throw new IllegalArgumentException("Interest rate is required for a savings account.");
+                    throw new IllegalArgumentException(
+                            "Interest rate is required for a savings account.");
                 }
                 return new SavingsAccount(currency, email, interestRate, iban);
 

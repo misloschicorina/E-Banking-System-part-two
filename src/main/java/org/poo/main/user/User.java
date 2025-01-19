@@ -1,18 +1,17 @@
 package org.poo.main.user;
 
-import org.poo.main.CashbackInfo;
-import org.poo.main.Commerciant.Commerciant;
-import org.poo.main.cards.Card;
-import org.poo.main.split.SplitPayment;
-import org.poo.main.accounts.Account;
-import org.poo.main.exchange_rate.ExchangeRate;
-import org.poo.main.transactions.Transaction;
-
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.format.DateTimeFormatter;
+
+import org.poo.main.split.SplitPayment;
+import org.poo.main.accounts.Account;
+import org.poo.main.transactions.Transaction;
 
 /**
  * Represents a user in the banking system.
@@ -27,12 +26,9 @@ public final class User {
     private String accountPlan;
     private List<Account> accounts; // Accounts linked to the user
     private List<Transaction> transactions; // Transactions performed by the user
-//    private final Map<Commerciant, CashbackInfo> cashbackInfo;
-    private final List<SplitPayment> pendingTransactions;
-//    private double totalSpendingThreshold; // Suma totală cheltuită pentru strategia spendingThreshold
+    private final List<SplitPayment> pendingTransactions; // Split payments pending of user
 
     private static final int MIN_AGE = 21;
-    private static final double THRESHOLD_100 = 100.0;
 
     public User(final String firstName, final String lastName, final String email,
                 final String birthDate, final String occupation) {
@@ -45,12 +41,11 @@ public final class User {
         this.transactions = new ArrayList<>();
         this.pendingTransactions = new ArrayList<>();
 
-        if ("student".equals(occupation))
+        if ("student".equals(occupation)) {
             this.accountPlan = "student";
-        else
+        } else {
             this.accountPlan = "standard";
-
-//        this.totalSpendingThreshold = 0.0;
+        }
     }
 
     public String getFirstName() {
@@ -105,18 +100,6 @@ public final class User {
         return transactions;
     }
 
-//    public double getTotalSpendingThreshold() {
-//        return totalSpendingThreshold;
-//    }
-//
-//    public void setTotalSpendingThreshold(final double amount) {
-//        totalSpendingThreshold = amount;
-//    }
-//
-//    public void addToTotalSpendingThreshold(final double amount) {
-//        this.totalSpendingThreshold += amount;
-//    }
-
     /**
      * Adds an account to the user's account list.
      *
@@ -160,7 +143,8 @@ public final class User {
             return;
         }
         int index = 0;
-        while (index < transactions.size() && transactions.get(index).getTimestamp() <= transaction.getTimestamp()) {
+        while (index < transactions.size()
+                && transactions.get(index).getTimestamp() <= transaction.getTimestamp()) {
             index++;
         }
         transactions.add(index, transaction);
@@ -210,7 +194,8 @@ public final class User {
     /**
      * Retrieves the oldest pending split payment transaction based on the timestamp.
      *
-     * @return the oldest SplitPayment transaction, or null if the list of pending transactions is empty
+     * @return the oldest SplitPayment transaction, or null if the list of pending
+     * transactions is empty
      */
     public SplitPayment getOldestPendingTransaction() {
         return pendingTransactions.stream()
@@ -227,22 +212,12 @@ public final class User {
                 String iban = acc.getIban();
                 if (payment.getIbanAcceptanceMap().containsKey(iban)
                         && payment.getIbanAcceptanceMap().get(iban) == null) {
-                    // Found the first unaccepted transaction for the account
-                    return Map.entry(payment, iban); // return the found split transaction and iban to accept
+                    // Found the first unaccepted transaction for the account and
+                    // return the found split transaction and iban to accept
+                    return Map.entry(payment, iban);
                 }
             }
         }
         return null;
     }
-
-    public List<Card> getAllCards() {
-        List<Card> allCards = new ArrayList<>();
-        for (Account account : accounts) {
-            // presupunem că există account.getCards()
-            allCards.addAll(account.getCards());
-        }
-        return allCards;
-    }
-
-
 }

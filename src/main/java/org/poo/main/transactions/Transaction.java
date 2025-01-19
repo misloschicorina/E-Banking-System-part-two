@@ -1,14 +1,11 @@
 package org.poo.main.transactions;
-
-import org.poo.main.user.User;
-
 import java.util.List;
 
 /**
  * Represents a financial transaction with different details, including sender, receiver, amount,
  * and additional metadata like currency, card details, and error information.
  */
-public class Transaction {
+public final class Transaction {
     private int timestamp;
     private String description;
     private String senderIBAN;
@@ -24,8 +21,8 @@ public class Transaction {
     private List<String> involvedAccounts;
     private String error;
     private String plan;
-    private String splitPaymentType; // Nou câmp pentru tipul de split payment
-    private List<Double> amountForUsers; // Nou câmp pentru sumele aferente utilizatorilor
+    private String splitPaymentType;
+    private List<Double> amountForUsers;
 
     public Transaction(final int timestamp, final String description, final String senderIBAN,
                        final String receiverIBAN, final Double amount, final String currency,
@@ -151,34 +148,29 @@ public class Transaction {
     }
 
     /**
-     * Adds this transaction to a user's transaction list.
-     *
-     * @param user The user to whom the transaction will be added.
-     */
-    public void addTransaction(final User user) {
-        if (user == null) {
-            return;
-        }
-        user.addTransaction(this);
-    }
-
-    /**
      * @return Error details if the transaction encountered an issue.
      */
     public String getError() {
         return error;
     }
 
+    /**
+     * @return The plan associated with the transaction.
+     */
     public String getPlan() {
         return plan;
     }
 
-    // Getter pentru splitPaymentType
+    /**
+     * @return The type of split payment for the transaction.
+     */
     public String getSplitPaymentType() {
         return splitPaymentType;
     }
 
-    // Getter pentru amountForUsers
+    /**
+     * @return The list of amounts allocated to each user in a split payment.
+     */
     public List<Double> getAmountForUsers() {
         return amountForUsers;
     }
