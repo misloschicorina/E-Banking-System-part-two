@@ -1,6 +1,6 @@
 package org.poo.main.cashback;
 
-import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.commerciant.Commerciant;
 import org.poo.main.accounts.Account;
 import org.poo.main.exchange_rate.ExchangeRate;
 

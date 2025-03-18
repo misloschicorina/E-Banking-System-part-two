@@ -1,7 +1,7 @@
 package org.poo.main.bank;
 
 import org.poo.main.commands.*;
-import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.commerciant.Commerciant;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.transactions.*;
 import org.poo.main.user.User;

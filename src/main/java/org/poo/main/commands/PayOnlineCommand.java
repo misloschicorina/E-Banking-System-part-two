@@ -11,7 +11,7 @@ import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.transactions.TransactionService;
 import org.poo.main.tools.Tools;
 import org.poo.main.user.User;
-import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.commerciant.Commerciant;
 import org.poo.utils.Utils;
 
 import java.util.List;

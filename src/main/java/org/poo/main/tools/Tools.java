@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import org.poo.fileio.CommandInput;
-import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.commerciant.Commerciant;
 import org.poo.main.transactions.TransactionDetail;
 import org.poo.main.cards.Card;
 import org.poo.main.split.SplitPayment;

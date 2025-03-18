@@ -1,7 +1,7 @@
 package org.poo.main.accounts;
 
 import org.poo.main.cashback.CashbackInfo;
-import org.poo.main.Commerciant.Commerciant;
+import org.poo.main.commerciant.Commerciant;
 import org.poo.main.cards.Card;
 import org.poo.main.exchange_rate.ExchangeRate;
 import org.poo.main.user.User;
