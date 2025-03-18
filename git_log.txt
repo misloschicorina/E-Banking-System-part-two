@@ -1,0 +1,35 @@
+commit e9c58f5d74429b09ad956e8c35448875b0aa3b4a
+Author: Alexandra <alexandra.misloschi@stud.acs.upb.ro>
+Date:   Sun Jan 19 20:53:10 2025 +0200
+
+    Resolved checkstyle problems
+
+commit 5a9a037323653cde4035c1e10ccd0e4fceb7d3f9
+Author: Alexandra <alexandra.misloschi@stud.acs.upb.ro>
+Date:   Sun Jan 19 01:08:01 2025 +0200
+
+    passed 16 tests
+
+commit e1629aeb1a7dfe93a228348e635a6d640ff04620
+Author: Alexandra <alexandra.misloschi@stud.acs.upb.ro>
+Date:   Sat Jan 11 23:38:39 2025 +0200
+
+    Implemented split command (equal and custom)
+
+commit d094e10d0489edcf52fe0a38f225367857ce8e85
+Author: Alexandra <alexandra.misloschi@stud.acs.upb.ro>
+Date:   Wed Jan 8 10:45:09 2025 +0200
+
+    Passed first 6 tests
+
+commit afac0ede8753caa30610647784e1cf0d6d77744b
+Author: Alexandra <alexandra.misloschi@stud.acs.upb.ro>
+Date:   Sat Jan 4 20:52:31 2025 +0200
+
+    passed first 2 tests
+
+commit 91dfa27beec4c78c159638bd5c3b1c2c85a65419
+Author: Alexandra <alexandra.misloschi@stud.acs.upb.ro>
+Date:   Fri Jan 3 12:34:04 2025 +0200
+
+    Initial commit
